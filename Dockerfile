@@ -16,7 +16,7 @@ RUN addgroup --system app \
 COPY --from=deps /app/node_modules ./node_modules
 COPY --chown=app:app package.json bunfig.toml tsconfig.json ./
 COPY --chown=app:app src ./src
-COPY --chown=app:app migrations ./migrations
+COPY --chown=app:app scripts ./scripts
 
 USER app
 

@@ -46,9 +46,7 @@ app-chart:
         scrapeTimeout: 10s
     config:
       APP_ENV: "prod"
-      PROD_DB_HOST: "bunzina-workshop-postgres"
-      PROD_DB_PORT: "5432"
-      PROD_DB_NAME: "bunzina-workshop"
+      MONGODB_DB: "bunzina-workshop"
       RABBITMQ_EXCHANGE: "bunzina.events"
       RABBITMQ_QUEUE: "bunzina-workshop.inbox"
       # Aponta para o release `bunzina-observability` (namespace `observability`).
@@ -56,20 +54,7 @@ app-chart:
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://alloy-gateway.observability.svc.cluster.local:4318"
       OTEL_SERVICE_NAME: "bunzina-workshop"
 
-  # Cada serviço tem o seu banco (ADR 0012). O app-chart sobe o Postgres deste
-  # serviço; o bunzina-workshop desliga isto e usa o MongoDB Atlas (ADR 0014).
+  # Este serviço usa o MongoDB Atlas M0, fora do cluster (ADR 0014). Não há
+  # banco para o app-chart subir.
   database:
-    enabled: true
-    name: bunzina-workshop-postgres
-    image: postgres:15
-    port: 5432
-    persistence:
-      storage: 5Gi
-      storageClassName: gp3
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "256Mi"
-      limits:
-        cpu: "500m"
-        memory: "512Mi"
+    enabled: false
