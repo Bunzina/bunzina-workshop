@@ -12,8 +12,6 @@ app-chart:
     service:
       type: ClusterIP
       port: 80
-    # API interna da oficina: alcançada por port-forward na demonstração,
-    # o que poupa um ALB da cota do Learner Lab.
     ingress:
       enabled: false
       className: alb
@@ -51,12 +49,8 @@ app-chart:
       MONGODB_DB: "bunzina-workshop"
       RABBITMQ_EXCHANGE: "bunzina.events"
       RABBITMQ_QUEUE: "bunzina-workshop.inbox"
-      # Aponta para o release `bunzina-observability` (namespace `observability`).
-      # Sem essa env var o tracing.ts nem inicializa.
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://alloy-gateway.observability.svc.cluster.local:4318"
       OTEL_SERVICE_NAME: "bunzina-workshop"
 
-  # Este serviço usa o MongoDB Atlas M0, fora do cluster (ADR 0014). Não há
-  # banco para o app-chart subir.
   database:
     enabled: false
