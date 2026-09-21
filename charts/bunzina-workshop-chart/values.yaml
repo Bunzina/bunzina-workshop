@@ -12,8 +12,10 @@ app-chart:
     service:
       type: ClusterIP
       port: 80
+    # API interna da oficina: alcançada por port-forward na demonstração,
+    # o que poupa um ALB da cota do Learner Lab.
     ingress:
-      enabled: true
+      enabled: false
       className: alb
       annotations:
         alb.ingress.kubernetes.io/scheme: internet-facing
