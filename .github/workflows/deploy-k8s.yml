@@ -58,8 +58,6 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      # O Atlas é alcançado pela internet, não pelo cluster: não há
-      # port-forward aqui. O IP de saída do runner precisa estar na allowlist.
       - name: Ensure indexes
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
