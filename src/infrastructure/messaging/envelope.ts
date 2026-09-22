@@ -1,3 +1,7 @@
+import {
+  failureReasons,
+  type FailureReason,
+} from '@/domain/execution/types/failure-reason';
 import { z } from 'zod';
 
 export const envelopeSchema = z.object({
@@ -17,19 +21,10 @@ export type Envelope<TData = Record<string, unknown>> = Omit<
   'data'
 > & { data: TData };
 
-export const failureReasons = [
-  'PART_UNAVAILABLE',
-  'EXPIRED',
-  'REJECTED',
-  'TIMEOUT',
-  'PROVIDER_ERROR',
-  'CUSTOMER_REQUEST',
-  'UNREPAIRABLE',
-] as const;
-
 export const failureReasonSchema = z.enum(failureReasons);
 
-export type FailureReason = (typeof failureReasons)[number];
+export { failureReasons };
+export type { FailureReason };
 
 type BuildInput<TData> = {
   eventType: string;
