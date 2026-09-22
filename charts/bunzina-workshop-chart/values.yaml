@@ -13,7 +13,7 @@ app-chart:
       type: ClusterIP
       port: 80
     ingress:
-      enabled: true
+      enabled: false
       className: alb
       annotations:
         alb.ingress.kubernetes.io/scheme: internet-facing
@@ -49,12 +49,8 @@ app-chart:
       MONGODB_DB: "bunzina-workshop"
       RABBITMQ_EXCHANGE: "bunzina.events"
       RABBITMQ_QUEUE: "bunzina-workshop.inbox"
-      # Aponta para o release `bunzina-observability` (namespace `observability`).
-      # Sem essa env var o tracing.ts nem inicializa.
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://alloy-gateway.observability.svc.cluster.local:4318"
       OTEL_SERVICE_NAME: "bunzina-workshop"
 
-  # Este serviço usa o MongoDB Atlas M0, fora do cluster (ADR 0014). Não há
-  # banco para o app-chart subir.
   database:
     enabled: false
