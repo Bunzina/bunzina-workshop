@@ -74,7 +74,11 @@ app.get('/ready', async ({ set }) => {
     await checkDependencies();
 
     return Response.json({ status: 'ready' });
-  } catch {
+  } catch (cause) {
+    logger.error({
+      message: `Readiness check failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+    });
+
     set.status = 503;
 
     return Response.json({ status: 'not_ready' }, { status: 503 });

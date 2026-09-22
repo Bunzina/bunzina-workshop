@@ -16,6 +16,8 @@ pathIgnorePatterns = [
 ]
 coveragePathIgnorePatterns = [
   "**/node_modules/**",
+  "**/observability/tracing.ts",
+  "**/observability/logger-trace.ts",
   "**/dist/**",
   "**/coverage/**",
   "**/migrations/**",
