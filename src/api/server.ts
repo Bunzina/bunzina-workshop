@@ -1,6 +1,7 @@
 import '@/infrastructure/observability/logger-trace';
 
 import { getDb } from '@/infrastructure/configs/mongo';
+import { startMessaging } from './messaging';
 import {
   createHttpMetrics,
   getMetrics,
@@ -96,6 +97,8 @@ app.get('/', ({ redirect }) => redirect('/swagger'), {
 
 /* c8 ignore next */
 if (import.meta.main) {
+  await startMessaging();
+
   app.listen(3000, () => {
     logger.info({
       message: 'Server is running on http://localhost:3000/swagger',
