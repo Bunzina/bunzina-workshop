@@ -10,12 +10,28 @@ const collectionFor = (name: string) => ({
     documents.set(name, [...(documents.get(name) ?? []), document]);
     return {};
   },
-  findOne: async () => null,
+  findOne: async (filter: Record<string, unknown>) =>
+    (documents.get(name) ?? []).find(
+      (document) => document.serviceOrderId === filter.serviceOrderId,
+    ) ?? null,
   find: () => ({
     sort: () => ({ toArray: async () => [] }),
     toArray: async () => [],
   }),
-  updateOne: async () => ({}),
+  updateOne: async (
+    filter: Record<string, unknown>,
+    update: { $set: Record<string, unknown> },
+  ) => {
+    documents.set(
+      name,
+      (documents.get(name) ?? []).map((document) =>
+        document.serviceOrderId === filter.serviceOrderId
+          ? { ...document, ...update.$set }
+          : document,
+      ),
+    );
+    return {};
+  },
 });
 
 const getDb = mock(
@@ -27,11 +43,15 @@ mock.module('@/infrastructure/configs/mongo', () => ({ getDb }));
 const ack = mock(() => {});
 const nack = mock(() => {});
 const bindQueue = mock(async () => ({}) as never);
+const publish = mock(
+  (_exchange: string, _routingKey: string, _content: Buffer) => true,
+);
 
 let consumeCallback: ((message: unknown) => Promise<void>) | null = null;
 
 const channel = {
   ack,
+  publish,
   nack,
   bindQueue,
   consume: mock(async (_queue: string, callback: never) => {
@@ -44,12 +64,17 @@ const channel = {
 
 const { startMessaging } = await import('./messaging');
 
-const startDiagnosticDelivery = () => {
+const deliveryOf = (envelope: ReturnType<typeof buildEnvelope>) => ({
+  content: Buffer.from(JSON.stringify(envelope)),
+  properties: { type: envelope.eventType, headers: {} },
+});
+
+const startDiagnosticDelivery = (serviceOrderId = crypto.randomUUID()) => {
   const envelope = buildEnvelope({
     eventType: 'cmd.workshop.start-diagnostic',
     correlationId: crypto.randomUUID(),
     data: {
-      serviceOrderId: crypto.randomUUID(),
+      serviceOrderId,
       vehicle: { id: crypto.randomUUID(), plate: 'ABC1D23', model: 'Gol 1.6' },
       requestedItems: {
         services: [{ serviceId: crypto.randomUUID(), priceCents: 38000 }],
@@ -59,17 +84,24 @@ const startDiagnosticDelivery = () => {
     },
   });
 
-  return {
-    content: Buffer.from(JSON.stringify(envelope)),
-    properties: { type: envelope.eventType, headers: {} },
-  };
+  return deliveryOf(envelope);
 };
+
+const abortDelivery = (serviceOrderId: string) =>
+  deliveryOf(
+    buildEnvelope({
+      eventType: 'cmd.workshop.abort',
+      correlationId: crypto.randomUUID(),
+      data: { serviceOrderId, reason: 'TIMEOUT', detail: 'Sem aprovação' },
+    }),
+  );
 
 beforeEach(() => {
   documents.clear();
   ack.mockClear();
   nack.mockClear();
   bindQueue.mockClear();
+  publish.mockClear();
   consumeCallback = null;
 });
 
@@ -121,5 +153,38 @@ describe('startMessaging', () => {
 
     expect(nack).toHaveBeenCalledTimes(1);
     expect(documents.get('execution_queue')).toBeUndefined();
+  });
+
+  it('aborts a service order under diagnostic and tells the orchestrator', async () => {
+    const serviceOrderId = crypto.randomUUID();
+    await startMessaging(channel as never);
+    await consumeCallback?.(startDiagnosticDelivery(serviceOrderId));
+
+    await consumeCallback?.(abortDelivery(serviceOrderId));
+
+    expect(documents.get('execution_queue')?.[0]).toMatchObject({
+      status: 'ABORTED',
+      failureReason: 'TIMEOUT',
+    });
+    expect(documents.get('execution_logs')?.[1]).toMatchObject({
+      event: 'execution-aborted',
+      reason: 'TIMEOUT',
+    });
+
+    const [, routingKey, content] = publish.mock.calls[0] ?? [];
+
+    expect(routingKey).toBe('evt.workshop.execution-aborted');
+    expect(JSON.parse(String(content)).data).toMatchObject({ serviceOrderId });
+    expect(ack).toHaveBeenCalledTimes(2);
+  });
+
+  it('acks an abort over a service order the workshop never received', async () => {
+    await startMessaging(channel as never);
+
+    await consumeCallback?.(abortDelivery(crypto.randomUUID()));
+
+    expect(publish).not.toHaveBeenCalled();
+    expect(ack).toHaveBeenCalledTimes(1);
+    expect(nack).not.toHaveBeenCalled();
   });
 });
