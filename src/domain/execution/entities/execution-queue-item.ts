@@ -1,6 +1,7 @@
 import { Entity, type EntityProps } from '@/domain/core/entities/entity';
+import { InvalidExecutionStatusError } from '../errors/execution-errors';
 import type { FailureReason } from '../types/failure-reason';
-import { ExecutionStatus } from '../types/execution-status';
+import { ExecutionStatus, isTerminalStatus } from '../types/execution-status';
 import type { Vehicle } from '../value-objects/vehicle';
 import type { ExecutionItem } from './execution-item';
 
@@ -23,6 +24,11 @@ export interface ExecutionQueueItemProps extends EntityProps {
   abortedAt?: Date;
 }
 
+export interface AbortProps {
+  reason: FailureReason;
+  detail?: string;
+}
+
 export class ExecutionQueueItem extends Entity {
   serviceOrderId!: string;
   vehicle!: Vehicle;
@@ -40,6 +46,21 @@ export class ExecutionQueueItem extends Entity {
   startedAt?: Date;
   completedAt?: Date;
   abortedAt?: Date;
+
+  get isFinished(): boolean {
+    return isTerminalStatus(this.status);
+  }
+
+  abort({ reason, detail }: AbortProps, at = new Date()): void {
+    if (this.isFinished) {
+      throw new InvalidExecutionStatusError('abort', this.status);
+    }
+
+    this.status = ExecutionStatus.ABORTED;
+    this.failureReason = reason;
+    this.failureDetail = detail;
+    this.abortedAt = at;
+  }
 
   constructor({ id, ...input }: ExecutionQueueItemProps) {
     super(id);
