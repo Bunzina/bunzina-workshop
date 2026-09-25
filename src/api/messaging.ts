@@ -1,9 +1,11 @@
 import type { Channel } from 'amqplib';
 import { makeAbortHandler } from '@/adapters/input/messaging/abort-handler';
 import { makeStartDiagnosticHandler } from '@/adapters/input/messaging/start-diagnostic-handler';
+import { makeStartExecutionHandler } from '@/adapters/input/messaging/start-execution-handler';
 import { RabbitMqEventPublisher } from '@/adapters/output/messaging/rabbitmq-event-publisher';
 import { AbortExecutionUseCase } from '@/application/use-cases/execution/abort-execution';
 import { StartDiagnosticUseCase } from '@/application/use-cases/execution/start-diagnostic';
+import { StartExecutionUseCase } from '@/application/use-cases/execution/start-execution';
 import { getDb } from '@/infrastructure/configs/mongo';
 import { startConsumer } from '@/infrastructure/messaging/consumer';
 import { ExecutionLogRepository } from '@/infrastructure/repositories/execution/execution-log-repository';
@@ -24,6 +26,10 @@ export const startMessaging = async (channel?: Channel): Promise<void> => {
     queueRepository,
     logRepository,
   );
+  const startExecution = new StartExecutionUseCase(
+    queueRepository,
+    logRepository,
+  );
   const abortExecution = new AbortExecutionUseCase(
     queueRepository,
     logRepository,
@@ -34,6 +40,7 @@ export const startMessaging = async (channel?: Channel): Promise<void> => {
     handlers: {
       'cmd.workshop.start-diagnostic':
         makeStartDiagnosticHandler(startDiagnostic),
+      'cmd.workshop.start-execution': makeStartExecutionHandler(startExecution),
       'cmd.workshop.abort': makeAbortHandler(abortExecution),
     },
     isFirstDelivery: processedEvents.isFirstDelivery,

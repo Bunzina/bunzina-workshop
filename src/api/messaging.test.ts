@@ -96,6 +96,31 @@ const abortDelivery = (serviceOrderId: string) =>
     }),
   );
 
+const startExecutionDelivery = (serviceOrderId: string) =>
+  deliveryOf(
+    buildEnvelope({
+      eventType: 'cmd.workshop.start-execution',
+      correlationId: crypto.randomUUID(),
+      data: {
+        serviceOrderId,
+        items: {
+          services: [{ serviceId: crypto.randomUUID() }],
+          autoParts: [],
+        },
+      },
+    }),
+  );
+
+const givenMechanicDiagnosed = (serviceOrderId: string) =>
+  documents.set(
+    'execution_queue',
+    (documents.get('execution_queue') ?? []).map((document) =>
+      document.serviceOrderId === serviceOrderId
+        ? { ...document, status: 'DIAGNOSED' }
+        : document,
+    ),
+  );
+
 beforeEach(() => {
   documents.clear();
   ack.mockClear();
@@ -185,6 +210,42 @@ describe('startMessaging', () => {
 
     expect(publish).not.toHaveBeenCalled();
     expect(ack).toHaveBeenCalledTimes(1);
+    expect(nack).not.toHaveBeenCalled();
+  });
+
+  it('puts a diagnosed service order into execution', async () => {
+    const serviceOrderId = crypto.randomUUID();
+    await startMessaging(channel as never);
+    await consumeCallback?.(startDiagnosticDelivery(serviceOrderId));
+    givenMechanicDiagnosed(serviceOrderId);
+
+    await consumeCallback?.(startExecutionDelivery(serviceOrderId));
+
+    expect(documents.get('execution_queue')?.[0]).toMatchObject({
+      status: 'IN_EXECUTION',
+      executionItems: [expect.objectContaining({ kind: 'SERVICE' })],
+    });
+    expect(documents.get('execution_logs')?.[1]).toMatchObject({
+      event: 'execution-started',
+      status: 'IN_EXECUTION',
+    });
+    expect(publish).not.toHaveBeenCalled();
+    expect(ack).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not resurrect an aborted service order', async () => {
+    const serviceOrderId = crypto.randomUUID();
+    await startMessaging(channel as never);
+    await consumeCallback?.(startDiagnosticDelivery(serviceOrderId));
+    await consumeCallback?.(abortDelivery(serviceOrderId));
+
+    await consumeCallback?.(startExecutionDelivery(serviceOrderId));
+
+    expect(documents.get('execution_queue')?.[0]).toMatchObject({
+      status: 'ABORTED',
+    });
+    expect(documents.get('execution_logs')).toHaveLength(2);
+    expect(ack).toHaveBeenCalledTimes(3);
     expect(nack).not.toHaveBeenCalled();
   });
 });
