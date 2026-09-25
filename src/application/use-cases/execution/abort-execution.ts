@@ -31,8 +31,6 @@ export class AbortExecutionUseCase implements AbortExecution {
       input.serviceOrderId,
     );
 
-    // Aborting what never arrived or already ended is a no-op, not an error:
-    // the compensation must be safe to send regardless of where the order is.
     if (!queueItem || queueItem.isFinished) {
       return queueItem;
     }

@@ -8,6 +8,7 @@ import type { ExecutionItem } from './execution-item';
 export interface ExecutionQueueItemProps extends EntityProps {
   serviceOrderId: string;
   vehicle: Vehicle;
+  correlationId?: string;
   status?: ExecutionStatus;
   currency?: string;
   requestedItems?: ExecutionItem[];
@@ -24,6 +25,12 @@ export interface ExecutionQueueItemProps extends EntityProps {
   abortedAt?: Date;
 }
 
+export interface CompleteDiagnosticProps {
+  items: ExecutionItem[];
+  diagnosedBy: string;
+  notes?: string;
+}
+
 export interface AbortProps {
   reason: FailureReason;
   detail?: string;
@@ -37,6 +44,7 @@ export class ExecutionQueueItem extends Entity {
   requestedItems!: ExecutionItem[];
   enqueuedAt!: Date;
   updatedAt!: Date;
+  correlationId?: string;
   diagnosedItems?: ExecutionItem[];
   notes?: string;
   diagnosedBy?: string;
@@ -49,6 +57,21 @@ export class ExecutionQueueItem extends Entity {
 
   get isFinished(): boolean {
     return isTerminalStatus(this.status);
+  }
+
+  completeDiagnostic(
+    { items, notes, diagnosedBy }: CompleteDiagnosticProps,
+    at = new Date(),
+  ): void {
+    if (this.status !== ExecutionStatus.IN_DIAGNOSTIC) {
+      throw new InvalidExecutionStatusError('diagnose', this.status);
+    }
+
+    this.status = ExecutionStatus.DIAGNOSED;
+    this.diagnosedItems = items;
+    this.notes = notes;
+    this.diagnosedBy = diagnosedBy;
+    this.diagnosedAt = at;
   }
 
   abort({ reason, detail }: AbortProps, at = new Date()): void {

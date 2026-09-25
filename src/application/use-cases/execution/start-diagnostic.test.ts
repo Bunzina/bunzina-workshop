@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { ExecutionLog } from '@/domain/execution/entities/execution-log';
-import type { ExecutionQueueItem } from '@/domain/execution/entities/execution-queue-item';
-import type { ExecutionLogRepository } from '@/domain/execution/repositories/execution-log-repository';
-import type { ExecutionQueueRepository } from '@/domain/execution/repositories/execution-queue-repository';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { ExecutionItemKind } from '@/domain/execution/types/execution-item-kind';
 import { ExecutionStatus } from '@/domain/execution/types/execution-status';
+import {
+  makeLogRepository,
+  makeQueueRepository,
+} from '@/test/factories/make-execution-doubles';
 import { makeExecutionQueueItem } from '@/test/factories/make-execution-queue-item';
 import {
   StartDiagnosticUseCase,
@@ -15,6 +15,7 @@ const anInput = (
   override?: Partial<StartDiagnosticInput>,
 ): StartDiagnosticInput => ({
   serviceOrderId: 'service-order-id',
+  correlationId: 'correlation-id',
   vehicle: { id: 'vehicle-id', plate: 'ABC1D23', model: 'Gol 1.6' },
   requestedItems: {
     services: [
@@ -37,22 +38,6 @@ const anInput = (
   ...override,
 });
 
-const makeQueueRepository = () =>
-  ({
-    create: mock(async (queueItem: ExecutionQueueItem) => queueItem),
-    findByServiceOrderId: mock(
-      async (): Promise<ExecutionQueueItem | null> => null,
-    ),
-    findByStatus: mock(async (): Promise<ExecutionQueueItem[]> => []),
-    update: mock(async (queueItem: ExecutionQueueItem) => queueItem),
-  }) satisfies ExecutionQueueRepository;
-
-const makeLogRepository = () =>
-  ({
-    append: mock(async (log: ExecutionLog) => log),
-    findByServiceOrderId: mock(async (): Promise<ExecutionLog[]> => []),
-  }) satisfies ExecutionLogRepository;
-
 describe('StartDiagnosticUseCase', () => {
   let queueRepository: ReturnType<typeof makeQueueRepository>;
   let logRepository: ReturnType<typeof makeLogRepository>;
@@ -71,6 +56,12 @@ describe('StartDiagnosticUseCase', () => {
     expect(queueItem.serviceOrderId).toBe('service-order-id');
     expect(queueItem.status).toBe(ExecutionStatus.IN_DIAGNOSTIC);
     expect(queueItem.currency).toBe('BRL');
+  });
+
+  it('keeps the correlation id of the saga to answer it later', async () => {
+    const queueItem = await useCase.execute(anInput());
+
+    expect(queueItem.correlationId).toBe('correlation-id');
   });
 
   it('keeps the vehicle that came with the command', async () => {

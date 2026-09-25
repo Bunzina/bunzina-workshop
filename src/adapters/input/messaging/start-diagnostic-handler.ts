@@ -6,6 +6,9 @@ export const makeStartDiagnosticHandler = (
   useCase: StartDiagnostic,
 ): MessageHandler => {
   return async (envelope) => {
-    await useCase.execute(startDiagnosticSchema.parse(envelope.data));
+    await useCase.execute({
+      ...startDiagnosticSchema.parse(envelope.data),
+      correlationId: envelope.correlationId,
+    });
   };
 };

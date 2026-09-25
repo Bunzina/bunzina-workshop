@@ -76,6 +76,47 @@ describe('ExecutionQueueItem', () => {
   });
 });
 
+describe('ExecutionQueueItem.completeDiagnostic', () => {
+  it('moves the service order to diagnosed with what the mechanic found', () => {
+    const diagnosedAt = new Date('2026-09-17T16:30:00.000Z');
+    const items = [anItem()];
+    const queueItem = new ExecutionQueueItem({
+      serviceOrderId: 'order-1',
+      vehicle,
+      status: ExecutionStatus.IN_DIAGNOSTIC,
+    });
+
+    queueItem.completeDiagnostic(
+      { items, notes: 'Correia com folga', diagnosedBy: 'mecanico-07' },
+      diagnosedAt,
+    );
+
+    expect(queueItem.status).toBe(ExecutionStatus.DIAGNOSED);
+    expect(queueItem.diagnosedItems).toBe(items);
+    expect(queueItem.notes).toBe('Correia com folga');
+    expect(queueItem.diagnosedBy).toBe('mecanico-07');
+    expect(queueItem.diagnosedAt).toBe(diagnosedAt);
+  });
+
+  it.each([
+    ExecutionStatus.QUEUED,
+    ExecutionStatus.DIAGNOSED,
+    ExecutionStatus.IN_EXECUTION,
+    ExecutionStatus.ABORTED,
+  ])('refuses to diagnose a service order that is %s', (status) => {
+    const queueItem = new ExecutionQueueItem({
+      serviceOrderId: 'order-1',
+      vehicle,
+      status,
+    });
+
+    expect(() =>
+      queueItem.completeDiagnostic({ items: [], diagnosedBy: 'mecanico-07' }),
+    ).toThrow(InvalidExecutionStatusError);
+    expect(queueItem.status).toBe(status);
+  });
+});
+
 describe('ExecutionQueueItem.abort', () => {
   it.each([
     ExecutionStatus.QUEUED,

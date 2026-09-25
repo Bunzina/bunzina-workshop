@@ -1,29 +1,16 @@
-import { Money } from '@/domain/core/value-objects/money';
-import { ExecutionItem } from '@/domain/execution/entities/execution-item';
 import { ExecutionLog } from '@/domain/execution/entities/execution-log';
 import { ExecutionQueueItem } from '@/domain/execution/entities/execution-queue-item';
 import type { ExecutionLogRepository } from '@/domain/execution/repositories/execution-log-repository';
 import type { ExecutionQueueRepository } from '@/domain/execution/repositories/execution-queue-repository';
-import { ExecutionItemKind } from '@/domain/execution/types/execution-item-kind';
 import { ExecutionStatus } from '@/domain/execution/types/execution-status';
 import { Vehicle } from '@/domain/execution/value-objects/vehicle';
+import { type PricedItemsInput, toExecutionItems } from './execution-items';
 
 export interface StartDiagnosticInput {
   serviceOrderId: string;
+  correlationId: string;
   vehicle: { id: string; plate: string; model?: string };
-  requestedItems: {
-    services: {
-      serviceId: string;
-      description?: string;
-      priceCents: number;
-    }[];
-    autoParts: {
-      autoPartId: string;
-      description?: string;
-      quantity: number;
-      unitPriceCents: number;
-    }[];
-  };
+  requestedItems: PricedItemsInput;
   currency: string;
 }
 
@@ -48,10 +35,11 @@ export class StartDiagnosticUseCase implements StartDiagnostic {
 
     const queueItem = new ExecutionQueueItem({
       serviceOrderId: input.serviceOrderId,
+      correlationId: input.correlationId,
       vehicle: new Vehicle(input.vehicle),
       status: ExecutionStatus.IN_DIAGNOSTIC,
       currency: input.currency,
-      requestedItems: this.toItems(input),
+      requestedItems: toExecutionItems(input.requestedItems, input.currency),
     });
 
     await this.queueRepository.create(queueItem);
@@ -65,30 +53,5 @@ export class StartDiagnosticUseCase implements StartDiagnostic {
     );
 
     return queueItem;
-  }
-
-  private toItems(input: StartDiagnosticInput): ExecutionItem[] {
-    const services = input.requestedItems.services.map(
-      (service) =>
-        new ExecutionItem({
-          kind: ExecutionItemKind.SERVICE,
-          referenceId: service.serviceId,
-          description: service.description,
-          unitPrice: new Money(service.priceCents, input.currency),
-        }),
-    );
-
-    const autoParts = input.requestedItems.autoParts.map(
-      (autoPart) =>
-        new ExecutionItem({
-          kind: ExecutionItemKind.AUTO_PART,
-          referenceId: autoPart.autoPartId,
-          description: autoPart.description,
-          quantity: autoPart.quantity,
-          unitPrice: new Money(autoPart.unitPriceCents, input.currency),
-        }),
-    );
-
-    return [...services, ...autoParts];
   }
 }

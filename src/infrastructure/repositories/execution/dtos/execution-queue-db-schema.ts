@@ -31,6 +31,7 @@ export interface ExecutionQueueDbSchema {
   requestedItems: ExecutionItemDbSchema[];
   enqueuedAt: Date;
   updatedAt: Date;
+  correlationId?: string;
   diagnosedItems?: ExecutionItemDbSchema[];
   notes?: string;
   diagnosedBy?: string;
