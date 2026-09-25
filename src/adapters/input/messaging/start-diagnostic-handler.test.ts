@@ -44,10 +44,13 @@ describe('makeStartDiagnosticHandler', () => {
   });
 
   it('hands the command payload to the use case', async () => {
-    await handle(envelopeFor(aPayload()));
+    const envelope = envelopeFor(aPayload());
+
+    await handle(envelope);
 
     expect(useCase.execute).toHaveBeenCalledWith({
       serviceOrderId,
+      correlationId: envelope.correlationId,
       vehicle: { id: vehicleId, plate: 'ABC1D23', model: 'Gol 1.6' },
       requestedItems: {
         services: [
