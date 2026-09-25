@@ -72,6 +72,7 @@ export const ExecutionQueueMapper = {
       updatedAt: queueItem.updatedAt,
       correlationId: queueItem.correlationId,
       diagnosedItems: queueItem.diagnosedItems?.map(itemToDatabase),
+      executionItems: queueItem.executionItems?.map(itemToDatabase),
       notes: queueItem.notes,
       diagnosedBy: queueItem.diagnosedBy,
       failureReason: queueItem.failureReason,
@@ -95,6 +96,9 @@ export const ExecutionQueueMapper = {
         itemToDomain(item, document.currency),
       ),
       diagnosedItems: document.diagnosedItems?.map((item) =>
+        itemToDomain(item, document.currency),
+      ),
+      executionItems: document.executionItems?.map((item) =>
         itemToDomain(item, document.currency),
       ),
       notes: document.notes,
