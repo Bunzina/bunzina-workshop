@@ -33,6 +33,7 @@ export interface ExecutionQueueDbSchema {
   updatedAt: Date;
   correlationId?: string;
   diagnosedItems?: ExecutionItemDbSchema[];
+  executionItems?: ExecutionItemDbSchema[];
   notes?: string;
   diagnosedBy?: string;
   failureReason?: FailureReason;

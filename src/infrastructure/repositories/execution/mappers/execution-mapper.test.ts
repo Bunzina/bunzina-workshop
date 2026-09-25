@@ -73,6 +73,36 @@ describe('ExecutionQueueMapper.toDatabase', () => {
     expect(ExecutionQueueMapper.toDomain(document)).toEqual(queueItem);
   });
 
+  it('writes the items under execution with the moment each one started', () => {
+    const startedAt = new Date('2026-09-17T17:00:00.000Z');
+    const queueItem = makeExecutionQueueItem({
+      status: ExecutionStatus.IN_EXECUTION,
+      executionItems: [
+        makeExecutionItem({
+          id: 'execution-item-id',
+          unitPrice: undefined,
+          startedAt,
+        }),
+      ],
+      startedAt,
+    });
+
+    const document = ExecutionQueueMapper.toDatabase(queueItem);
+
+    expect(document.executionItems).toEqual([
+      {
+        id: 'execution-item-id',
+        kind: ExecutionItemKind.SERVICE,
+        referenceId: 'service-id',
+        description: 'Troca de correia',
+        quantity: 1,
+        isCompleted: false,
+        startedAt,
+      },
+    ]);
+    expect(document.startedAt).toEqual(startedAt);
+  });
+
   it('writes an item without price as it came from the execution command', () => {
     const queueItem = makeExecutionQueueItem({
       requestedItems: [makeExecutionItem({ unitPrice: undefined })],
@@ -128,6 +158,25 @@ describe('ExecutionQueueMapper.toDomain', () => {
 
     expect(rebuilt.diagnosedItems?.[0]?.id).toBe('diagnosed-item-id');
     expect(rebuilt.diagnosedItems?.[0]?.unitPrice?.amountCents).toBe(38000);
+  });
+
+  it('rebuilds the items of a service order under execution', () => {
+    const queueItem = makeExecutionQueueItem({
+      status: ExecutionStatus.IN_EXECUTION,
+      executionItems: [
+        makeExecutionItem({
+          id: 'execution-item-id',
+          unitPrice: undefined,
+          startedAt: new Date('2026-09-17T17:00:00.000Z'),
+        }),
+      ],
+    });
+
+    const rebuilt = ExecutionQueueMapper.toDomain(
+      ExecutionQueueMapper.toDatabase(queueItem),
+    );
+
+    expect(rebuilt).toEqual(queueItem);
   });
 
   it('rebuilds an item that has no price', () => {

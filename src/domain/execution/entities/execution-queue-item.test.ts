@@ -117,6 +117,61 @@ describe('ExecutionQueueItem.completeDiagnostic', () => {
   });
 });
 
+describe('ExecutionQueueItem.startExecution', () => {
+  it('moves a diagnosed service order into execution with the approved items', () => {
+    const startedAt = new Date('2026-09-17T17:00:00.000Z');
+    const items = [anItem()];
+    const queueItem = new ExecutionQueueItem({
+      serviceOrderId: 'order-1',
+      vehicle,
+      status: ExecutionStatus.DIAGNOSED,
+    });
+
+    queueItem.startExecution({ items }, startedAt);
+
+    expect(queueItem.status).toBe(ExecutionStatus.IN_EXECUTION);
+    expect(queueItem.executionItems).toBe(items);
+    expect(queueItem.startedAt).toBe(startedAt);
+  });
+
+  it('starts the clock of every approved item', () => {
+    const startedAt = new Date('2026-09-17T17:00:00.000Z');
+    const queueItem = new ExecutionQueueItem({
+      serviceOrderId: 'order-1',
+      vehicle,
+      status: ExecutionStatus.DIAGNOSED,
+    });
+
+    queueItem.startExecution({ items: [anItem(), anItem()] }, startedAt);
+
+    expect(queueItem.executionItems?.map((item) => item.startedAt)).toEqual([
+      startedAt,
+      startedAt,
+    ]);
+  });
+
+  it.each([
+    ExecutionStatus.QUEUED,
+    ExecutionStatus.IN_DIAGNOSTIC,
+    ExecutionStatus.IN_EXECUTION,
+    ExecutionStatus.COMPLETED,
+    ExecutionStatus.FAILED,
+    ExecutionStatus.ABORTED,
+  ])('refuses to start executing a service order that is %s', (status) => {
+    const queueItem = new ExecutionQueueItem({
+      serviceOrderId: 'order-1',
+      vehicle,
+      status,
+    });
+
+    expect(() => queueItem.startExecution({ items: [anItem()] })).toThrow(
+      InvalidExecutionStatusError,
+    );
+    expect(queueItem.status).toBe(status);
+    expect(queueItem.executionItems).toBeUndefined();
+  });
+});
+
 describe('ExecutionQueueItem.abort', () => {
   it.each([
     ExecutionStatus.QUEUED,
