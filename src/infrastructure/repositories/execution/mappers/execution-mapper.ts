@@ -70,6 +70,7 @@ export const ExecutionQueueMapper = {
       requestedItems: queueItem.requestedItems.map(itemToDatabase),
       enqueuedAt: queueItem.enqueuedAt,
       updatedAt: queueItem.updatedAt,
+      correlationId: queueItem.correlationId,
       diagnosedItems: queueItem.diagnosedItems?.map(itemToDatabase),
       notes: queueItem.notes,
       diagnosedBy: queueItem.diagnosedBy,
@@ -87,6 +88,7 @@ export const ExecutionQueueMapper = {
       id: document.id,
       serviceOrderId: document.serviceOrderId,
       vehicle: new Vehicle(document.vehicle),
+      correlationId: document.correlationId,
       status: document.status,
       currency: document.currency,
       requestedItems: document.requestedItems.map((item) =>
