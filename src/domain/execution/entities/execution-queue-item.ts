@@ -1,5 +1,9 @@
 import { Entity, type EntityProps } from '@/domain/core/entities/entity';
-import { InvalidExecutionStatusError } from '../errors/execution-errors';
+import {
+  ExecutionItemNotFoundError,
+  InvalidExecutionStatusError,
+} from '../errors/execution-errors';
+import { ExecutionItemKind } from '../types/execution-item-kind';
 import type { FailureReason } from '../types/failure-reason';
 import { ExecutionStatus, isTerminalStatus } from '../types/execution-status';
 import type { Vehicle } from '../value-objects/vehicle';
@@ -34,6 +38,10 @@ export interface CompleteDiagnosticProps {
 
 export interface StartExecutionProps {
   items: ExecutionItem[];
+}
+
+export interface CompleteItemsProps {
+  serviceIds: string[];
 }
 
 export interface AbortProps {
@@ -92,6 +100,43 @@ export class ExecutionQueueItem extends Entity {
     this.status = ExecutionStatus.IN_EXECUTION;
     this.executionItems = items;
     this.startedAt = at;
+  }
+
+  get services(): ExecutionItem[] {
+    return (this.executionItems ?? []).filter(
+      (item) => item.kind === ExecutionItemKind.SERVICE,
+    );
+  }
+
+  completeItems({ serviceIds }: CompleteItemsProps, at = new Date()): void {
+    if (this.status !== ExecutionStatus.IN_EXECUTION) {
+      throw new InvalidExecutionStatusError('complete items of', this.status);
+    }
+
+    const services = serviceIds.map((serviceId) => {
+      const service = this.services.find(
+        (item) => item.referenceId === serviceId,
+      );
+
+      if (!service) {
+        throw new ExecutionItemNotFoundError(this.serviceOrderId, serviceId);
+      }
+
+      return service;
+    });
+
+    for (const service of services) {
+      service.complete(at);
+    }
+
+    if (this.services.every((service) => service.isCompleted)) {
+      for (const item of this.executionItems ?? []) {
+        item.complete(at);
+      }
+
+      this.status = ExecutionStatus.COMPLETED;
+      this.completedAt = at;
+    }
   }
 
   abort({ reason, detail }: AbortProps, at = new Date()): void {

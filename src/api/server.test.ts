@@ -116,6 +116,38 @@ describe('PATCH /diagnostics/:serviceOrderId', () => {
   });
 });
 
+describe('PATCH /executions/:serviceOrderId/items', () => {
+  it('reaches the queue and answers 404 for an unknown service order', async () => {
+    const serviceOrderId = crypto.randomUUID();
+
+    const response = await app.handle(
+      new Request(`http://localhost/executions/${serviceOrderId}/items`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          services: [{ serviceId: crypto.randomUUID() }],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(404);
+    expect(findOne).toHaveBeenCalledWith({ serviceOrderId });
+  });
+
+  it('is described in the swagger', async () => {
+    const response = await app.handle(
+      new Request('http://localhost/swagger/json'),
+    );
+    const document = (await response.json()) as {
+      paths: Record<string, { patch?: unknown }>;
+    };
+
+    expect(
+      document.paths['/executions/{serviceOrderId}/items']?.patch,
+    ).toBeDefined();
+  });
+});
+
 describe('an unknown route', () => {
   it('answers 404 and still records the request', async () => {
     const response = await app.handle(new Request('http://localhost/nope'));

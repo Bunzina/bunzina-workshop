@@ -27,6 +27,18 @@ export class ExecutionItem extends Entity {
   finishedAt?: Date;
   executionTimeMs?: number;
 
+  complete(at = new Date()): void {
+    if (this.isCompleted) {
+      return;
+    }
+
+    this.isCompleted = true;
+    this.finishedAt = at;
+    this.executionTimeMs = this.startedAt
+      ? at.getTime() - this.startedAt.getTime()
+      : undefined;
+  }
+
   constructor({ id, ...input }: ExecutionItemProps) {
     super(id);
 

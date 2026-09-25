@@ -13,3 +13,12 @@ export class InvalidExecutionStatusError extends Error {
     this.name = 'InvalidExecutionStatusError';
   }
 }
+
+export class ExecutionItemNotFoundError extends Error {
+  constructor(serviceOrderId: string, serviceId: string) {
+    super(
+      `Service ${serviceId} is not part of the execution of service order ${serviceOrderId}`,
+    );
+    this.name = 'ExecutionItemNotFoundError';
+  }
+}

@@ -1,11 +1,16 @@
 import '@/infrastructure/observability/logger-trace';
 
 import { makeDiagnosticRoutes } from '@/adapters/input/http/diagnostic-routes';
+import { makeExecutionRoutes } from '@/adapters/input/http/execution-routes';
 import { RabbitMqEventPublisher } from '@/adapters/output/messaging/rabbitmq-event-publisher';
 import {
   type CompleteDiagnostic,
   CompleteDiagnosticUseCase,
 } from '@/application/use-cases/execution/complete-diagnostic';
+import {
+  type CompleteExecutionItems,
+  CompleteExecutionItemsUseCase,
+} from '@/application/use-cases/execution/complete-execution-items';
 import { getDb } from '@/infrastructure/configs/mongo';
 import { ExecutionLogRepository } from '@/infrastructure/repositories/execution/execution-log-repository';
 import { ExecutionQueueRepository } from '@/infrastructure/repositories/execution/execution-queue-repository';
@@ -64,6 +69,10 @@ app.use(
           name: 'Diagnostics',
           description: 'Ações do mecânico durante o diagnóstico da OS',
         },
+        {
+          name: 'Executions',
+          description: 'Ações do mecânico durante a execução da OS',
+        },
       ],
     },
     path: '/swagger',
@@ -115,7 +124,20 @@ const completeDiagnostic: CompleteDiagnostic = {
   },
 };
 
+const completeExecutionItems: CompleteExecutionItems = {
+  execute: async (input) => {
+    const db = await getDb();
+
+    return new CompleteExecutionItemsUseCase(
+      new ExecutionQueueRepository(db),
+      new ExecutionLogRepository(db),
+      new RabbitMqEventPublisher(),
+    ).execute(input);
+  },
+};
+
 app.use(makeDiagnosticRoutes(completeDiagnostic));
+app.use(makeExecutionRoutes(completeExecutionItems));
 
 app.get('/', ({ redirect }) => redirect('/swagger'), {
   detail: { hide: true },
