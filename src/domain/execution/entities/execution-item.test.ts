@@ -67,3 +67,42 @@ describe('ExecutionItem', () => {
     );
   });
 });
+
+describe('ExecutionItem.complete', () => {
+  it('marks the item finished and measures how long it took', () => {
+    const item = new ExecutionItem({
+      ...service,
+      startedAt: new Date('2026-09-17T14:30:00.000Z'),
+    });
+    const finishedAt = new Date('2026-09-17T16:00:00.000Z');
+
+    item.complete(finishedAt);
+
+    expect(item.isCompleted).toBe(true);
+    expect(item.finishedAt).toBe(finishedAt);
+    expect(item.executionTimeMs).toBe(5400000);
+  });
+
+  it('leaves the duration unknown when the item never started', () => {
+    const item = new ExecutionItem(service);
+
+    item.complete();
+
+    expect(item.isCompleted).toBe(true);
+    expect(item.executionTimeMs).toBeUndefined();
+  });
+
+  it('keeps the first finish when completed again', () => {
+    const item = new ExecutionItem({
+      ...service,
+      startedAt: new Date('2026-09-17T14:30:00.000Z'),
+    });
+    const finishedAt = new Date('2026-09-17T16:00:00.000Z');
+
+    item.complete(finishedAt);
+    item.complete(new Date('2026-09-17T18:00:00.000Z'));
+
+    expect(item.finishedAt).toBe(finishedAt);
+    expect(item.executionTimeMs).toBe(5400000);
+  });
+});

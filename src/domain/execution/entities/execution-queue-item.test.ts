@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import { Money } from '@/domain/core/value-objects/money';
-import { InvalidExecutionStatusError } from '../errors/execution-errors';
+import {
+  ExecutionItemNotFoundError,
+  InvalidExecutionStatusError,
+} from '../errors/execution-errors';
 import { ExecutionItemKind } from '../types/execution-item-kind';
 import { ExecutionStatus } from '../types/execution-status';
 import { Vehicle } from '../value-objects/vehicle';
@@ -169,6 +172,128 @@ describe('ExecutionQueueItem.startExecution', () => {
     );
     expect(queueItem.status).toBe(status);
     expect(queueItem.executionItems).toBeUndefined();
+  });
+});
+
+describe('ExecutionQueueItem.completeItems', () => {
+  const startedAt = new Date('2026-09-17T14:30:00.000Z');
+  const finishedAt = new Date('2026-09-17T16:00:00.000Z');
+
+  const inExecution = () =>
+    new ExecutionQueueItem({
+      serviceOrderId: 'order-1',
+      vehicle,
+      status: ExecutionStatus.IN_EXECUTION,
+      startedAt,
+      executionItems: [
+        new ExecutionItem({
+          kind: ExecutionItemKind.SERVICE,
+          referenceId: 'service-1',
+          startedAt,
+        }),
+        new ExecutionItem({
+          kind: ExecutionItemKind.SERVICE,
+          referenceId: 'service-2',
+          startedAt,
+        }),
+        new ExecutionItem({
+          kind: ExecutionItemKind.AUTO_PART,
+          referenceId: 'auto-part-1',
+          startedAt,
+        }),
+      ],
+    });
+
+  it('completes a service and keeps the execution going while others remain', () => {
+    const queueItem = inExecution();
+
+    queueItem.completeItems({ serviceIds: ['service-1'] }, finishedAt);
+
+    expect(queueItem.status).toBe(ExecutionStatus.IN_EXECUTION);
+    expect(queueItem.completedAt).toBeUndefined();
+    expect(queueItem.services.map((item) => item.isCompleted)).toEqual([
+      true,
+      false,
+    ]);
+    expect(queueItem.services[0]?.executionTimeMs).toBe(5400000);
+  });
+
+  it('completes the execution when the last service is done', () => {
+    const queueItem = inExecution();
+
+    queueItem.completeItems({ serviceIds: ['service-1'] }, startedAt);
+    queueItem.completeItems({ serviceIds: ['service-2'] }, finishedAt);
+
+    expect(queueItem.status).toBe(ExecutionStatus.COMPLETED);
+    expect(queueItem.completedAt).toBe(finishedAt);
+    expect(queueItem.isFinished).toBe(true);
+  });
+
+  it('gives the auto parts as applied when the execution completes', () => {
+    const queueItem = inExecution();
+
+    queueItem.completeItems(
+      { serviceIds: ['service-1', 'service-2'] },
+      finishedAt,
+    );
+
+    const autoPart = queueItem.executionItems?.find(
+      (item) => item.kind === ExecutionItemKind.AUTO_PART,
+    );
+
+    expect(autoPart?.isCompleted).toBe(true);
+    expect(autoPart?.finishedAt).toBe(finishedAt);
+  });
+
+  it('only lists services as the items the mechanic completes', () => {
+    expect(inExecution().services.map((item) => item.referenceId)).toEqual([
+      'service-1',
+      'service-2',
+    ]);
+  });
+
+  it('has no services before the execution starts', () => {
+    const queueItem = new ExecutionQueueItem({
+      serviceOrderId: 'order-1',
+      vehicle,
+    });
+
+    expect(queueItem.services).toEqual([]);
+  });
+
+  it('refuses a service that is not part of the execution, without completing any', () => {
+    const queueItem = inExecution();
+
+    expect(() =>
+      queueItem.completeItems({ serviceIds: ['service-1', 'unknown'] }),
+    ).toThrow(ExecutionItemNotFoundError);
+    expect(queueItem.services.some((item) => item.isCompleted)).toBe(false);
+  });
+
+  it('refuses an auto part as if it were a service', () => {
+    expect(() =>
+      inExecution().completeItems({ serviceIds: ['auto-part-1'] }),
+    ).toThrow(ExecutionItemNotFoundError);
+  });
+
+  it.each([
+    ExecutionStatus.QUEUED,
+    ExecutionStatus.IN_DIAGNOSTIC,
+    ExecutionStatus.DIAGNOSED,
+    ExecutionStatus.COMPLETED,
+    ExecutionStatus.FAILED,
+    ExecutionStatus.ABORTED,
+  ])('refuses to complete items of a service order that is %s', (status) => {
+    const queueItem = new ExecutionQueueItem({
+      serviceOrderId: 'order-1',
+      vehicle,
+      status,
+    });
+
+    expect(() =>
+      queueItem.completeItems({ serviceIds: ['service-1'] }),
+    ).toThrow(InvalidExecutionStatusError);
+    expect(queueItem.status).toBe(status);
   });
 });
 
