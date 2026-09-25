@@ -13,6 +13,7 @@ export interface ExecutionQueueItemProps extends EntityProps {
   currency?: string;
   requestedItems?: ExecutionItem[];
   diagnosedItems?: ExecutionItem[];
+  executionItems?: ExecutionItem[];
   notes?: string;
   diagnosedBy?: string;
   failureReason?: FailureReason;
@@ -31,6 +32,10 @@ export interface CompleteDiagnosticProps {
   notes?: string;
 }
 
+export interface StartExecutionProps {
+  items: ExecutionItem[];
+}
+
 export interface AbortProps {
   reason: FailureReason;
   detail?: string;
@@ -46,6 +51,7 @@ export class ExecutionQueueItem extends Entity {
   updatedAt!: Date;
   correlationId?: string;
   diagnosedItems?: ExecutionItem[];
+  executionItems?: ExecutionItem[];
   notes?: string;
   diagnosedBy?: string;
   failureReason?: FailureReason;
@@ -72,6 +78,20 @@ export class ExecutionQueueItem extends Entity {
     this.notes = notes;
     this.diagnosedBy = diagnosedBy;
     this.diagnosedAt = at;
+  }
+
+  startExecution({ items }: StartExecutionProps, at = new Date()): void {
+    if (this.status !== ExecutionStatus.DIAGNOSED) {
+      throw new InvalidExecutionStatusError('start executing', this.status);
+    }
+
+    for (const item of items) {
+      item.startedAt = at;
+    }
+
+    this.status = ExecutionStatus.IN_EXECUTION;
+    this.executionItems = items;
+    this.startedAt = at;
   }
 
   abort({ reason, detail }: AbortProps, at = new Date()): void {
