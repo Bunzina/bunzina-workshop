@@ -1,6 +1,14 @@
 import '@/infrastructure/observability/logger-trace';
 
+import { makeDiagnosticRoutes } from '@/adapters/input/http/diagnostic-routes';
+import { RabbitMqEventPublisher } from '@/adapters/output/messaging/rabbitmq-event-publisher';
+import {
+  type CompleteDiagnostic,
+  CompleteDiagnosticUseCase,
+} from '@/application/use-cases/execution/complete-diagnostic';
 import { getDb } from '@/infrastructure/configs/mongo';
+import { ExecutionLogRepository } from '@/infrastructure/repositories/execution/execution-log-repository';
+import { ExecutionQueueRepository } from '@/infrastructure/repositories/execution/execution-queue-repository';
 import { startMessaging } from './messaging';
 import {
   createHttpMetrics,
@@ -52,6 +60,10 @@ app.use(
       },
       tags: [
         { name: 'Health', description: 'Verificação de saúde do serviço' },
+        {
+          name: 'Diagnostics',
+          description: 'Ações do mecânico durante o diagnóstico da OS',
+        },
       ],
     },
     path: '/swagger',
@@ -90,6 +102,20 @@ async function checkDependencies(): Promise<void> {
   const db = await getDb();
   await db.command({ ping: 1 });
 }
+
+const completeDiagnostic: CompleteDiagnostic = {
+  execute: async (input) => {
+    const db = await getDb();
+
+    return new CompleteDiagnosticUseCase(
+      new ExecutionQueueRepository(db),
+      new ExecutionLogRepository(db),
+      new RabbitMqEventPublisher(),
+    ).execute(input);
+  },
+};
+
+app.use(makeDiagnosticRoutes(completeDiagnostic));
 
 app.get('/', ({ redirect }) => redirect('/swagger'), {
   detail: { hide: true },

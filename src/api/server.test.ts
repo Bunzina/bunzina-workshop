@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 const error = mock((_payload: { message: string }) => {});
 const command = mock(async () => ({ ok: 1 }));
-const getDb = mock(async () => ({ command }) as never);
+const findOne = mock(async () => null);
+const getDb = mock(
+  async () => ({ command, collection: () => ({ findOne }) }) as never,
+);
 
 mock.module('@lucas-pmelo/logger', () => ({
   default: {
@@ -77,6 +80,39 @@ describe('GET /', () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get('location')).toBe('/swagger');
+  });
+});
+
+describe('PATCH /diagnostics/:serviceOrderId', () => {
+  it('reaches the queue and answers 404 for an unknown service order', async () => {
+    const serviceOrderId = crypto.randomUUID();
+
+    const response = await app.handle(
+      new Request(`http://localhost/diagnostics/${serviceOrderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          diagnosedItems: { services: [], autoParts: [] },
+          diagnosedBy: 'mecanico-07',
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(404);
+    expect(findOne).toHaveBeenCalledWith({ serviceOrderId });
+  });
+
+  it('is described in the swagger', async () => {
+    const response = await app.handle(
+      new Request('http://localhost/swagger/json'),
+    );
+    const document = (await response.json()) as {
+      paths: Record<string, { patch?: unknown }>;
+    };
+
+    expect(
+      document.paths['/diagnostics/{serviceOrderId}']?.patch,
+    ).toBeDefined();
   });
 });
 

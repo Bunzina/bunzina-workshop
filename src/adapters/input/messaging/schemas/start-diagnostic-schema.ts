@@ -13,6 +13,11 @@ const autoPartSchema = z.object({
   unitPriceCents: z.int().nonnegative(),
 });
 
+export const pricedItemsSchema = z.object({
+  services: z.array(serviceSchema).default([]),
+  autoParts: z.array(autoPartSchema).default([]),
+});
+
 export const startDiagnosticSchema = z.object({
   serviceOrderId: z.uuid(),
   vehicle: z.object({
@@ -20,10 +25,7 @@ export const startDiagnosticSchema = z.object({
     plate: z.string().min(1),
     model: z.string().optional(),
   }),
-  requestedItems: z.object({
-    services: z.array(serviceSchema).default([]),
-    autoParts: z.array(autoPartSchema).default([]),
-  }),
+  requestedItems: pricedItemsSchema,
   currency: z.string().min(1).default('BRL'),
 });
 

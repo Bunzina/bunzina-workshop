@@ -53,6 +53,26 @@ describe('ExecutionQueueMapper.toDatabase', () => {
     expect(document.diagnosedAt).toEqual(new Date('2026-09-17T16:30:00.000Z'));
   });
 
+  it('writes the correlation id of the saga and the reason of an abort', () => {
+    const queueItem = makeExecutionQueueItem({
+      correlationId: 'correlation-id',
+      status: ExecutionStatus.ABORTED,
+      failureReason: 'TIMEOUT',
+      failureDetail: 'Cliente não respondeu',
+      abortedAt: new Date('2026-09-17T16:55:00.000Z'),
+    });
+
+    const document = ExecutionQueueMapper.toDatabase(queueItem);
+
+    expect(document).toMatchObject({
+      correlationId: 'correlation-id',
+      failureReason: 'TIMEOUT',
+      failureDetail: 'Cliente não respondeu',
+      abortedAt: new Date('2026-09-17T16:55:00.000Z'),
+    });
+    expect(ExecutionQueueMapper.toDomain(document)).toEqual(queueItem);
+  });
+
   it('writes an item without price as it came from the execution command', () => {
     const queueItem = makeExecutionQueueItem({
       requestedItems: [makeExecutionItem({ unitPrice: undefined })],
