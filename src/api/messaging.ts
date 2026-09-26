@@ -2,6 +2,7 @@ import type { Channel } from 'amqplib';
 import { makeAbortHandler } from '@/adapters/input/messaging/abort-handler';
 import { makeStartDiagnosticHandler } from '@/adapters/input/messaging/start-diagnostic-handler';
 import { makeStartExecutionHandler } from '@/adapters/input/messaging/start-execution-handler';
+import { PrometheusExecutionMetrics } from '@/adapters/output/metrics/prometheus-execution-metrics';
 import { RabbitMqEventPublisher } from '@/adapters/output/messaging/rabbitmq-event-publisher';
 import { AbortExecutionUseCase } from '@/application/use-cases/execution/abort-execution';
 import { StartDiagnosticUseCase } from '@/application/use-cases/execution/start-diagnostic';
@@ -34,6 +35,7 @@ export const startMessaging = async (channel?: Channel): Promise<void> => {
     queueRepository,
     logRepository,
     eventPublisher,
+    new PrometheusExecutionMetrics(),
   );
 
   await startConsumer({

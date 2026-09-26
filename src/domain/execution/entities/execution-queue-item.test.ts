@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { Money } from '@/domain/core/value-objects/money';
 import {
+  ExecutionItemAlreadyCompletedError,
   ExecutionItemNotFoundError,
   InvalidExecutionStatusError,
 } from '../errors/execution-errors';
@@ -297,12 +298,178 @@ describe('ExecutionQueueItem.completeItems', () => {
   });
 });
 
+describe('ExecutionQueueItem.failDiagnostic', () => {
+  it('moves a service order in diagnostic to failed with the reason', () => {
+    const failedAt = new Date('2026-09-17T16:30:00.000Z');
+    const queueItem = new ExecutionQueueItem({
+      serviceOrderId: 'order-1',
+      vehicle,
+      status: ExecutionStatus.IN_DIAGNOSTIC,
+    });
+
+    queueItem.failDiagnostic(
+      { reason: 'UNREPAIRABLE', detail: 'Bloco do motor trincado' },
+      failedAt,
+    );
+
+    expect(queueItem.status).toBe(ExecutionStatus.FAILED);
+    expect(queueItem.failureReason).toBe('UNREPAIRABLE');
+    expect(queueItem.failureDetail).toBe('Bloco do motor trincado');
+    expect(queueItem.failedAt).toBe(failedAt);
+    expect(queueItem.isFinished).toBe(true);
+  });
+
+  it.each([
+    ExecutionStatus.QUEUED,
+    ExecutionStatus.DIAGNOSED,
+    ExecutionStatus.IN_EXECUTION,
+    ExecutionStatus.FAILED,
+    ExecutionStatus.ABORTED,
+  ])(
+    'refuses to fail the diagnostic of a service order that is %s',
+    (status) => {
+      const queueItem = new ExecutionQueueItem({
+        serviceOrderId: 'order-1',
+        vehicle,
+        status,
+      });
+
+      expect(() =>
+        queueItem.failDiagnostic({ reason: 'UNREPAIRABLE' }),
+      ).toThrow(InvalidExecutionStatusError);
+      expect(queueItem.status).toBe(status);
+    },
+  );
+});
+
+describe('ExecutionQueueItem.failExecution', () => {
+  const failedAt = new Date('2026-09-17T17:30:00.000Z');
+
+  const inExecution = () =>
+    new ExecutionQueueItem({
+      serviceOrderId: 'order-1',
+      vehicle,
+      status: ExecutionStatus.IN_EXECUTION,
+      executionItems: [
+        new ExecutionItem({
+          kind: ExecutionItemKind.SERVICE,
+          referenceId: 'service-1',
+          isCompleted: true,
+        }),
+        new ExecutionItem({
+          kind: ExecutionItemKind.SERVICE,
+          referenceId: 'service-2',
+        }),
+        new ExecutionItem({
+          kind: ExecutionItemKind.SERVICE,
+          referenceId: 'service-3',
+        }),
+        new ExecutionItem({
+          kind: ExecutionItemKind.AUTO_PART,
+          referenceId: 'auto-part-1',
+        }),
+      ],
+    });
+
+  it('moves a service order in execution to failed with the reason', () => {
+    const queueItem = inExecution();
+
+    queueItem.failExecution(
+      {
+        reason: 'PART_UNAVAILABLE',
+        detail: 'Correia dentada sem estoque no fornecedor',
+      },
+      failedAt,
+    );
+
+    expect(queueItem.status).toBe(ExecutionStatus.FAILED);
+    expect(queueItem.failureReason).toBe('PART_UNAVAILABLE');
+    expect(queueItem.failureDetail).toBe(
+      'Correia dentada sem estoque no fornecedor',
+    );
+    expect(queueItem.failedAt).toBe(failedAt);
+  });
+
+  it('gives every pending service as failed when none is named', () => {
+    const queueItem = inExecution();
+
+    queueItem.failExecution({ reason: 'PART_UNAVAILABLE' }, failedAt);
+
+    expect(queueItem.failedServices.map((item) => item.referenceId)).toEqual([
+      'service-2',
+      'service-3',
+    ]);
+  });
+
+  it('fails only the services the mechanic named', () => {
+    const queueItem = inExecution();
+
+    queueItem.failExecution(
+      { reason: 'PART_UNAVAILABLE', serviceIds: ['service-3'] },
+      failedAt,
+    );
+
+    expect(queueItem.failedServices.map((item) => item.referenceId)).toEqual([
+      'service-3',
+    ]);
+    expect(queueItem.failedServices[0]?.failedAt).toBe(failedAt);
+  });
+
+  it('refuses a service that is not part of the execution, without failing', () => {
+    const queueItem = inExecution();
+
+    expect(() =>
+      queueItem.failExecution({
+        reason: 'PART_UNAVAILABLE',
+        serviceIds: ['unknown'],
+      }),
+    ).toThrow(ExecutionItemNotFoundError);
+    expect(queueItem.status).toBe(ExecutionStatus.IN_EXECUTION);
+  });
+
+  it('refuses a service that was already completed', () => {
+    const queueItem = inExecution();
+
+    expect(() =>
+      queueItem.failExecution({
+        reason: 'PART_UNAVAILABLE',
+        serviceIds: ['service-1'],
+      }),
+    ).toThrow(ExecutionItemAlreadyCompletedError);
+    expect(queueItem.status).toBe(ExecutionStatus.IN_EXECUTION);
+  });
+
+  it.each([
+    ExecutionStatus.QUEUED,
+    ExecutionStatus.IN_DIAGNOSTIC,
+    ExecutionStatus.DIAGNOSED,
+    ExecutionStatus.COMPLETED,
+    ExecutionStatus.FAILED,
+    ExecutionStatus.ABORTED,
+  ])(
+    'refuses to fail the execution of a service order that is %s',
+    (status) => {
+      const queueItem = new ExecutionQueueItem({
+        serviceOrderId: 'order-1',
+        vehicle,
+        status,
+      });
+
+      expect(() =>
+        queueItem.failExecution({ reason: 'PART_UNAVAILABLE' }),
+      ).toThrow(InvalidExecutionStatusError);
+      expect(queueItem.status).toBe(status);
+    },
+  );
+});
+
 describe('ExecutionQueueItem.abort', () => {
   it.each([
     ExecutionStatus.QUEUED,
     ExecutionStatus.IN_DIAGNOSTIC,
     ExecutionStatus.DIAGNOSED,
     ExecutionStatus.IN_EXECUTION,
+    ExecutionStatus.FAILED,
   ])('aborts a service order that is %s', (status) => {
     const abortedAt = new Date('2026-09-17T16:55:00.000Z');
     const queueItem = new ExecutionQueueItem({
@@ -320,20 +487,19 @@ describe('ExecutionQueueItem.abort', () => {
     expect(queueItem.isFinished).toBe(true);
   });
 
-  it.each([
-    ExecutionStatus.COMPLETED,
-    ExecutionStatus.FAILED,
-    ExecutionStatus.ABORTED,
-  ])('refuses to abort a service order that is already %s', (status) => {
-    const queueItem = new ExecutionQueueItem({
-      serviceOrderId: 'order-1',
-      vehicle,
-      status,
-    });
+  it.each([ExecutionStatus.COMPLETED, ExecutionStatus.ABORTED])(
+    'refuses to abort a service order that is already %s',
+    (status) => {
+      const queueItem = new ExecutionQueueItem({
+        serviceOrderId: 'order-1',
+        vehicle,
+        status,
+      });
 
-    expect(() => queueItem.abort({ reason: 'TIMEOUT' })).toThrow(
-      InvalidExecutionStatusError,
-    );
-    expect(queueItem.status).toBe(status);
-  });
+      expect(() => queueItem.abort({ reason: 'TIMEOUT' })).toThrow(
+        InvalidExecutionStatusError,
+      );
+      expect(queueItem.status).toBe(status);
+    },
+  );
 });

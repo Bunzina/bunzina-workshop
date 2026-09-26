@@ -8,4 +8,5 @@ export interface ExecutionQueueRepository {
   ): Promise<ExecutionQueueItem | null>;
   findByStatus(status: ExecutionStatus): Promise<ExecutionQueueItem[]>;
   update(queueItem: ExecutionQueueItem): Promise<ExecutionQueueItem>;
+  countByStatus(): Promise<Partial<Record<ExecutionStatus, number>>>;
 }

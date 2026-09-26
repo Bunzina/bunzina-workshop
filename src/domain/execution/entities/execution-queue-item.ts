@@ -1,5 +1,6 @@
 import { Entity, type EntityProps } from '@/domain/core/entities/entity';
 import {
+  ExecutionItemAlreadyCompletedError,
   ExecutionItemNotFoundError,
   InvalidExecutionStatusError,
 } from '../errors/execution-errors';
@@ -27,6 +28,7 @@ export interface ExecutionQueueItemProps extends EntityProps {
   diagnosedAt?: Date;
   startedAt?: Date;
   completedAt?: Date;
+  failedAt?: Date;
   abortedAt?: Date;
 }
 
@@ -42,6 +44,15 @@ export interface StartExecutionProps {
 
 export interface CompleteItemsProps {
   serviceIds: string[];
+}
+
+export interface FailProps {
+  reason: FailureReason;
+  detail?: string;
+}
+
+export interface FailExecutionProps extends FailProps {
+  serviceIds?: string[];
 }
 
 export interface AbortProps {
@@ -67,10 +78,18 @@ export class ExecutionQueueItem extends Entity {
   diagnosedAt?: Date;
   startedAt?: Date;
   completedAt?: Date;
+  failedAt?: Date;
   abortedAt?: Date;
 
   get isFinished(): boolean {
     return isTerminalStatus(this.status);
+  }
+
+  get canBeAborted(): boolean {
+    return (
+      this.status !== ExecutionStatus.COMPLETED &&
+      this.status !== ExecutionStatus.ABORTED
+    );
   }
 
   completeDiagnostic(
@@ -113,17 +132,7 @@ export class ExecutionQueueItem extends Entity {
       throw new InvalidExecutionStatusError('complete items of', this.status);
     }
 
-    const services = serviceIds.map((serviceId) => {
-      const service = this.services.find(
-        (item) => item.referenceId === serviceId,
-      );
-
-      if (!service) {
-        throw new ExecutionItemNotFoundError(this.serviceOrderId, serviceId);
-      }
-
-      return service;
-    });
+    const services = serviceIds.map((serviceId) => this.findService(serviceId));
 
     for (const service of services) {
       service.complete(at);
@@ -139,8 +148,45 @@ export class ExecutionQueueItem extends Entity {
     }
   }
 
+  get failedServices(): ExecutionItem[] {
+    return this.services.filter((service) => service.hasFailed);
+  }
+
+  failDiagnostic({ reason, detail }: FailProps, at = new Date()): void {
+    if (this.status !== ExecutionStatus.IN_DIAGNOSTIC) {
+      throw new InvalidExecutionStatusError(
+        'fail the diagnostic of',
+        this.status,
+      );
+    }
+
+    this.markFailed({ reason, detail }, at);
+  }
+
+  failExecution(
+    { reason, detail, serviceIds = [] }: FailExecutionProps,
+    at = new Date(),
+  ): void {
+    if (this.status !== ExecutionStatus.IN_EXECUTION) {
+      throw new InvalidExecutionStatusError(
+        'fail the execution of',
+        this.status,
+      );
+    }
+
+    const services = serviceIds.length
+      ? serviceIds.map((serviceId) => this.findPendingService(serviceId))
+      : this.services.filter((service) => !service.isCompleted);
+
+    for (const service of services) {
+      service.fail(at);
+    }
+
+    this.markFailed({ reason, detail }, at);
+  }
+
   abort({ reason, detail }: AbortProps, at = new Date()): void {
-    if (this.isFinished) {
+    if (!this.canBeAborted) {
       throw new InvalidExecutionStatusError('abort', this.status);
     }
 
@@ -148,6 +194,38 @@ export class ExecutionQueueItem extends Entity {
     this.failureReason = reason;
     this.failureDetail = detail;
     this.abortedAt = at;
+  }
+
+  private markFailed({ reason, detail }: FailProps, at: Date): void {
+    this.status = ExecutionStatus.FAILED;
+    this.failureReason = reason;
+    this.failureDetail = detail;
+    this.failedAt = at;
+  }
+
+  private findService(serviceId: string): ExecutionItem {
+    const service = this.services.find(
+      (item) => item.referenceId === serviceId,
+    );
+
+    if (!service) {
+      throw new ExecutionItemNotFoundError(this.serviceOrderId, serviceId);
+    }
+
+    return service;
+  }
+
+  private findPendingService(serviceId: string): ExecutionItem {
+    const service = this.findService(serviceId);
+
+    if (service.isCompleted) {
+      throw new ExecutionItemAlreadyCompletedError(
+        this.serviceOrderId,
+        serviceId,
+      );
+    }
+
+    return service;
   }
 
   constructor({ id, ...input }: ExecutionQueueItemProps) {

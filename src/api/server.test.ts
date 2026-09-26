@@ -148,6 +148,40 @@ describe('PATCH /executions/:serviceOrderId/items', () => {
   });
 });
 
+describe('failure routes', () => {
+  it.each([
+    ['/diagnostics/{serviceOrderId}/failure'],
+    ['/executions/{serviceOrderId}/failure'],
+  ])('describes %s in the swagger', async (path) => {
+    const response = await app.handle(
+      new Request('http://localhost/swagger/json'),
+    );
+    const document = (await response.json()) as {
+      paths: Record<string, { post?: unknown }>;
+    };
+
+    expect(document.paths[path]?.post).toBeDefined();
+  });
+
+  it.each([['diagnostics'], ['executions']])(
+    'reaches the queue from POST /%s/:id/failure',
+    async (prefix) => {
+      const serviceOrderId = crypto.randomUUID();
+
+      const response = await app.handle(
+        new Request(`http://localhost/${prefix}/${serviceOrderId}/failure`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: 'PART_UNAVAILABLE' }),
+        }),
+      );
+
+      expect(response.status).toBe(404);
+      expect(findOne).toHaveBeenCalledWith({ serviceOrderId });
+    },
+  );
+});
+
 describe('an unknown route', () => {
   it('answers 404 and still records the request', async () => {
     const response = await app.handle(new Request('http://localhost/nope'));

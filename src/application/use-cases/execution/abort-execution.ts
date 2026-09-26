@@ -4,6 +4,7 @@ import type { ExecutionLogRepository } from '@/domain/execution/repositories/exe
 import type { ExecutionQueueRepository } from '@/domain/execution/repositories/execution-queue-repository';
 import type { FailureReason } from '@/domain/execution/types/failure-reason';
 import type { EventPublisher } from '@/application/ports/event-publisher';
+import type { ExecutionMetrics } from '@/application/ports/execution-metrics';
 
 export interface AbortExecutionInput {
   serviceOrderId: string;
@@ -22,6 +23,7 @@ export class AbortExecutionUseCase implements AbortExecution {
     private readonly queueRepository: ExecutionQueueRepository,
     private readonly logRepository: ExecutionLogRepository,
     private readonly eventPublisher: EventPublisher,
+    private readonly metrics: ExecutionMetrics,
   ) {}
 
   async execute(
@@ -31,7 +33,7 @@ export class AbortExecutionUseCase implements AbortExecution {
       input.serviceOrderId,
     );
 
-    if (!queueItem || queueItem.isFinished) {
+    if (!queueItem || !queueItem.canBeAborted) {
       return queueItem;
     }
 
@@ -40,6 +42,7 @@ export class AbortExecutionUseCase implements AbortExecution {
     queueItem.abort({ reason: input.reason, detail: input.detail });
 
     await this.queueRepository.update(queueItem);
+    this.metrics.aborted(queueItem);
 
     await this.logRepository.append(
       new ExecutionLog({

@@ -8,6 +8,7 @@ import { ExecutionItemKind } from '@/domain/execution/types/execution-item-kind'
 import { ExecutionStatus } from '@/domain/execution/types/execution-status';
 import {
   makeEventPublisher,
+  makeExecutionMetrics,
   makeLogRepository,
   makeQueueRepository,
 } from '@/test/factories/make-execution-doubles';
@@ -49,16 +50,19 @@ describe('CompleteExecutionItemsUseCase', () => {
   let queueRepository: ReturnType<typeof makeQueueRepository>;
   let logRepository: ReturnType<typeof makeLogRepository>;
   let eventPublisher: ReturnType<typeof makeEventPublisher>;
+  let metrics: ReturnType<typeof makeExecutionMetrics>;
   let useCase: CompleteExecutionItemsUseCase;
 
   beforeEach(() => {
     queueRepository = makeQueueRepository();
     logRepository = makeLogRepository();
     eventPublisher = makeEventPublisher();
+    metrics = makeExecutionMetrics();
     useCase = new CompleteExecutionItemsUseCase(
       queueRepository,
       logRepository,
       eventPublisher,
+      metrics,
     );
 
     queueRepository.findByServiceOrderId.mockResolvedValue(
@@ -87,10 +91,11 @@ describe('CompleteExecutionItemsUseCase', () => {
       expect(log?.metadata).toEqual({ serviceIds: ['service-1'] });
     });
 
-    it('does not publish anything', async () => {
+    it('does not publish nor measure anything', async () => {
       await useCase.execute(anInput());
 
       expect(eventPublisher.publish).not.toHaveBeenCalled();
+      expect(metrics.executionFinished).not.toHaveBeenCalled();
     });
   });
 
@@ -104,6 +109,12 @@ describe('CompleteExecutionItemsUseCase', () => {
       expect(queueItem.status).toBe(ExecutionStatus.COMPLETED);
       expect(queueItem.completedAt).toBeDate();
       expect(queueRepository.update).toHaveBeenCalledWith(queueItem);
+    });
+
+    it('measures how long the execution took', async () => {
+      const queueItem = await completeAll();
+
+      expect(metrics.executionFinished).toHaveBeenCalledWith(queueItem);
     });
 
     it('records the completion in the history after the items', async () => {

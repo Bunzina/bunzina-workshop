@@ -73,6 +73,25 @@ describe('ExecutionQueueMapper.toDatabase', () => {
     expect(ExecutionQueueMapper.toDomain(document)).toEqual(queueItem);
   });
 
+  it('writes the failure and which services failed, and reads them back', () => {
+    const failedAt = new Date('2026-09-17T17:30:00.000Z');
+    const queueItem = makeExecutionQueueItem({
+      status: ExecutionStatus.FAILED,
+      failureReason: 'PART_UNAVAILABLE',
+      failureDetail: 'Correia dentada sem estoque no fornecedor',
+      failedAt,
+      executionItems: [
+        makeExecutionItem({ id: 'execution-item-id', failedAt }),
+      ],
+    });
+
+    const document = ExecutionQueueMapper.toDatabase(queueItem);
+
+    expect(document.failedAt).toEqual(failedAt);
+    expect(document.executionItems?.[0]?.failedAt).toEqual(failedAt);
+    expect(ExecutionQueueMapper.toDomain(document)).toEqual(queueItem);
+  });
+
   it('writes the items under execution with the moment each one started', () => {
     const startedAt = new Date('2026-09-17T17:00:00.000Z');
     const queueItem = makeExecutionQueueItem({

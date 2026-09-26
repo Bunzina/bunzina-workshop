@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { ExecutionStatus } from '@/domain/execution/types/execution-status';
 import {
   makeEventPublisher,
+  makeExecutionMetrics,
   makeLogRepository,
   makeQueueRepository,
 } from '@/test/factories/make-execution-doubles';
@@ -26,6 +27,7 @@ describe('AbortExecutionUseCase', () => {
   let queueRepository: ReturnType<typeof makeQueueRepository>;
   let logRepository: ReturnType<typeof makeLogRepository>;
   let eventPublisher: ReturnType<typeof makeEventPublisher>;
+  let metrics: ReturnType<typeof makeExecutionMetrics>;
   let useCase: AbortExecutionUseCase;
 
   const givenServiceOrderIs = (status: ExecutionStatus) => {
@@ -38,10 +40,12 @@ describe('AbortExecutionUseCase', () => {
     queueRepository = makeQueueRepository();
     logRepository = makeLogRepository();
     eventPublisher = makeEventPublisher();
+    metrics = makeExecutionMetrics();
     useCase = new AbortExecutionUseCase(
       queueRepository,
       logRepository,
       eventPublisher,
+      metrics,
     );
   });
 
@@ -49,6 +53,7 @@ describe('AbortExecutionUseCase', () => {
     ['during the diagnostic', ExecutionStatus.IN_DIAGNOSTIC],
     ['after the diagnostic', ExecutionStatus.DIAGNOSED],
     ['during the execution', ExecutionStatus.IN_EXECUTION],
+    ['after the execution failed', ExecutionStatus.FAILED],
   ])('%s', (_moment, status) => {
     it('marks the service order as aborted with the reason', async () => {
       givenServiceOrderIs(status);
@@ -77,6 +82,14 @@ describe('AbortExecutionUseCase', () => {
       expect(log?.metadata).toEqual({ previousStatus: status });
     });
 
+    it('counts the abort by its reason', async () => {
+      givenServiceOrderIs(status);
+
+      const queueItem = await useCase.execute(anInput());
+
+      expect(metrics.aborted).toHaveBeenCalledWith(queueItem);
+    });
+
     it('tells the orchestrator the execution was aborted', async () => {
       givenServiceOrderIs(status);
 
@@ -94,23 +107,23 @@ describe('AbortExecutionUseCase', () => {
     });
   });
 
-  describe.each([
-    ExecutionStatus.COMPLETED,
-    ExecutionStatus.FAILED,
-    ExecutionStatus.ABORTED,
-  ])('over a service order that is already %s', (status) => {
-    it('changes nothing and publishes nothing', async () => {
-      const existing = givenServiceOrderIs(status);
+  describe.each([ExecutionStatus.COMPLETED, ExecutionStatus.ABORTED])(
+    'over a service order that is already %s',
+    (status) => {
+      it('changes nothing and publishes nothing', async () => {
+        const existing = givenServiceOrderIs(status);
 
-      const queueItem = await useCase.execute(anInput());
+        const queueItem = await useCase.execute(anInput());
 
-      expect(queueItem).toBe(existing);
-      expect(queueItem?.status).toBe(status);
-      expect(queueRepository.update).not.toHaveBeenCalled();
-      expect(logRepository.append).not.toHaveBeenCalled();
-      expect(eventPublisher.publish).not.toHaveBeenCalled();
-    });
-  });
+        expect(queueItem).toBe(existing);
+        expect(queueItem?.status).toBe(status);
+        expect(queueRepository.update).not.toHaveBeenCalled();
+        expect(logRepository.append).not.toHaveBeenCalled();
+        expect(eventPublisher.publish).not.toHaveBeenCalled();
+        expect(metrics.aborted).not.toHaveBeenCalled();
+      });
+    },
+  );
 
   it('ignores a service order the workshop never received', async () => {
     const queueItem = await useCase.execute(anInput());

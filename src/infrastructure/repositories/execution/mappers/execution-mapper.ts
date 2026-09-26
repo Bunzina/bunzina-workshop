@@ -28,6 +28,7 @@ const itemToDatabase = (item: ExecutionItem): ExecutionItemDbSchema =>
     totalPriceCents: item.totalPrice?.amountCents,
     startedAt: item.startedAt,
     finishedAt: item.finishedAt,
+    failedAt: item.failedAt,
     executionTimeMs: item.executionTimeMs,
   });
 
@@ -52,6 +53,7 @@ const itemToDomain = (
         : new Money(document.totalPriceCents, currency),
     startedAt: document.startedAt,
     finishedAt: document.finishedAt,
+    failedAt: document.failedAt,
     executionTimeMs: document.executionTimeMs,
   });
 
@@ -80,6 +82,7 @@ export const ExecutionQueueMapper = {
       diagnosedAt: queueItem.diagnosedAt,
       startedAt: queueItem.startedAt,
       completedAt: queueItem.completedAt,
+      failedAt: queueItem.failedAt,
       abortedAt: queueItem.abortedAt,
     });
   },
@@ -110,6 +113,7 @@ export const ExecutionQueueMapper = {
       diagnosedAt: document.diagnosedAt,
       startedAt: document.startedAt,
       completedAt: document.completedAt,
+      failedAt: document.failedAt,
       abortedAt: document.abortedAt,
     });
   },
