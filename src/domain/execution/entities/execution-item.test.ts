@@ -106,3 +106,30 @@ describe('ExecutionItem.complete', () => {
     expect(item.executionTimeMs).toBe(5400000);
   });
 });
+
+describe('ExecutionItem.fail', () => {
+  it('marks the moment the item failed', () => {
+    const item = new ExecutionItem(service);
+    const failedAt = new Date('2026-09-17T17:30:00.000Z');
+
+    item.fail(failedAt);
+
+    expect(item.hasFailed).toBe(true);
+    expect(item.failedAt).toBe(failedAt);
+    expect(item.isCompleted).toBe(false);
+  });
+
+  it('keeps the first failure when failed again', () => {
+    const item = new ExecutionItem(service);
+    const failedAt = new Date('2026-09-17T17:30:00.000Z');
+
+    item.fail(failedAt);
+    item.fail(new Date('2026-09-17T18:00:00.000Z'));
+
+    expect(item.failedAt).toBe(failedAt);
+  });
+
+  it('has not failed until told so', () => {
+    expect(new ExecutionItem(service).hasFailed).toBe(false);
+  });
+});

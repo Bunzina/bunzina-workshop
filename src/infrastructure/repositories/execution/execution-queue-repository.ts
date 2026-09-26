@@ -46,4 +46,14 @@ export class ExecutionQueueRepository implements ExecutionQueueRepositoryContrac
 
     return queueItem;
   }
+
+  async countByStatus(): Promise<Partial<Record<ExecutionStatus, number>>> {
+    const groups = await this.collection
+      .aggregate<{ _id: ExecutionStatus; count: number }>([
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ])
+      .toArray();
+
+    return Object.fromEntries(groups.map(({ _id, count }) => [_id, count]));
+  }
 }

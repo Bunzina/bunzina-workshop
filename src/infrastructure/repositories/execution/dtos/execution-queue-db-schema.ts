@@ -19,6 +19,7 @@ export interface ExecutionItemDbSchema {
   totalPriceCents?: number;
   startedAt?: Date;
   finishedAt?: Date;
+  failedAt?: Date;
   executionTimeMs?: number;
 }
 
@@ -41,5 +42,6 @@ export interface ExecutionQueueDbSchema {
   diagnosedAt?: Date;
   startedAt?: Date;
   completedAt?: Date;
+  failedAt?: Date;
   abortedAt?: Date;
 }

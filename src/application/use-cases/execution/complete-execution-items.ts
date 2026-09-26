@@ -5,6 +5,7 @@ import type { ExecutionLogRepository } from '@/domain/execution/repositories/exe
 import type { ExecutionQueueRepository } from '@/domain/execution/repositories/execution-queue-repository';
 import { ExecutionStatus } from '@/domain/execution/types/execution-status';
 import type { EventPublisher } from '@/application/ports/event-publisher';
+import type { ExecutionMetrics } from '@/application/ports/execution-metrics';
 
 export interface CompleteExecutionItemsInput {
   serviceOrderId: string;
@@ -20,6 +21,7 @@ export class CompleteExecutionItemsUseCase implements CompleteExecutionItems {
     private readonly queueRepository: ExecutionQueueRepository,
     private readonly logRepository: ExecutionLogRepository,
     private readonly eventPublisher: EventPublisher,
+    private readonly metrics: ExecutionMetrics,
   ) {}
 
   async execute(
@@ -47,6 +49,7 @@ export class CompleteExecutionItemsUseCase implements CompleteExecutionItems {
     );
 
     if (queueItem.status === ExecutionStatus.COMPLETED) {
+      this.metrics.executionFinished(queueItem);
       await this.publishCompletion(queueItem);
     }
 

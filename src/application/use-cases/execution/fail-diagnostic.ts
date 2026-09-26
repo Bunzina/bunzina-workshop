@@ -3,26 +3,21 @@ import type { ExecutionQueueItem } from '@/domain/execution/entities/execution-q
 import { ExecutionNotFoundError } from '@/domain/execution/errors/execution-errors';
 import type { ExecutionLogRepository } from '@/domain/execution/repositories/execution-log-repository';
 import type { ExecutionQueueRepository } from '@/domain/execution/repositories/execution-queue-repository';
+import type { FailureReason } from '@/domain/execution/types/failure-reason';
 import type { EventPublisher } from '@/application/ports/event-publisher';
 import type { ExecutionMetrics } from '@/application/ports/execution-metrics';
-import {
-  type PricedItemsInput,
-  toExecutionItems,
-  toPricedItems,
-} from './execution-items';
 
-export interface CompleteDiagnosticInput {
+export interface FailDiagnosticInput {
   serviceOrderId: string;
-  diagnosedItems: PricedItemsInput;
-  diagnosedBy: string;
-  notes?: string;
+  reason: FailureReason;
+  detail?: string;
 }
 
-export type CompleteDiagnostic = {
-  execute(input: CompleteDiagnosticInput): Promise<ExecutionQueueItem>;
+export type FailDiagnostic = {
+  execute(input: FailDiagnosticInput): Promise<ExecutionQueueItem>;
 };
 
-export class CompleteDiagnosticUseCase implements CompleteDiagnostic {
+export class FailDiagnosticUseCase implements FailDiagnostic {
   constructor(
     private readonly queueRepository: ExecutionQueueRepository,
     private readonly logRepository: ExecutionLogRepository,
@@ -30,7 +25,7 @@ export class CompleteDiagnosticUseCase implements CompleteDiagnostic {
     private readonly metrics: ExecutionMetrics,
   ) {}
 
-  async execute(input: CompleteDiagnosticInput): Promise<ExecutionQueueItem> {
+  async execute(input: FailDiagnosticInput): Promise<ExecutionQueueItem> {
     const queueItem = await this.queueRepository.findByServiceOrderId(
       input.serviceOrderId,
     );
@@ -39,11 +34,7 @@ export class CompleteDiagnosticUseCase implements CompleteDiagnostic {
       throw new ExecutionNotFoundError(input.serviceOrderId);
     }
 
-    queueItem.completeDiagnostic({
-      items: toExecutionItems(input.diagnosedItems, queueItem.currency),
-      notes: input.notes,
-      diagnosedBy: input.diagnosedBy,
-    });
+    queueItem.failDiagnostic({ reason: input.reason, detail: input.detail });
 
     await this.queueRepository.update(queueItem);
     this.metrics.diagnosticFinished(queueItem);
@@ -51,22 +42,20 @@ export class CompleteDiagnosticUseCase implements CompleteDiagnostic {
     await this.logRepository.append(
       new ExecutionLog({
         serviceOrderId: queueItem.serviceOrderId,
-        event: 'diagnostic-completed',
+        event: 'diagnostic-failed',
         status: queueItem.status,
-        detail: input.notes,
-        metadata: { diagnosedBy: input.diagnosedBy },
+        reason: input.reason,
+        detail: input.detail,
       }),
     );
 
     await this.eventPublisher.publish({
-      eventType: 'evt.workshop.diagnostic-completed',
+      eventType: 'evt.workshop.diagnostic-failed',
       correlationId: queueItem.correlationId ?? queueItem.serviceOrderId,
       data: {
         serviceOrderId: queueItem.serviceOrderId,
-        diagnosedItems: toPricedItems(queueItem.diagnosedItems ?? []),
-        notes: queueItem.notes,
-        diagnosedBy: queueItem.diagnosedBy,
-        currency: queueItem.currency,
+        reason: input.reason,
+        detail: input.detail,
       },
     });
 

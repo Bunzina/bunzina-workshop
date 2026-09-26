@@ -12,6 +12,7 @@ export interface ExecutionItemProps extends EntityProps {
   isCompleted?: boolean;
   startedAt?: Date;
   finishedAt?: Date;
+  failedAt?: Date;
   executionTimeMs?: number;
 }
 
@@ -25,7 +26,16 @@ export class ExecutionItem extends Entity {
   totalPrice?: Money;
   startedAt?: Date;
   finishedAt?: Date;
+  failedAt?: Date;
   executionTimeMs?: number;
+
+  get hasFailed(): boolean {
+    return this.failedAt !== undefined;
+  }
+
+  fail(at = new Date()): void {
+    this.failedAt ??= at;
+  }
 
   complete(at = new Date()): void {
     if (this.isCompleted) {

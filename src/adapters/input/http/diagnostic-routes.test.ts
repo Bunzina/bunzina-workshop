@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { CompleteDiagnosticInput } from '@/application/use-cases/execution/complete-diagnostic';
+import type { FailDiagnosticInput } from '@/application/use-cases/execution/fail-diagnostic';
 import type { ExecutionQueueItem } from '@/domain/execution/entities/execution-queue-item';
 import {
   ExecutionNotFoundError,
@@ -36,6 +37,18 @@ const patch = (
     }),
   );
 
+const makeFail = () =>
+  mock(
+    async (input: FailDiagnosticInput): Promise<ExecutionQueueItem> =>
+      makeExecutionQueueItem({
+        serviceOrderId: input.serviceOrderId,
+        status: ExecutionStatus.FAILED,
+        failureReason: input.reason,
+        failureDetail: input.detail,
+        failedAt: new Date('2026-09-17T16:30:00.000Z'),
+      }),
+  );
+
 const makeExecute = () =>
   mock(
     async (input: CompleteDiagnosticInput): Promise<ExecutionQueueItem> =>
@@ -52,7 +65,7 @@ describe('PATCH /diagnostics/:serviceOrderId', () => {
 
   beforeEach(() => {
     useCase = { execute: makeExecute() };
-    app = makeDiagnosticRoutes(useCase);
+    app = makeDiagnosticRoutes(useCase, { execute: makeFail() });
   });
 
   it('completes the diagnostic with what the mechanic found', async () => {
@@ -136,5 +149,87 @@ describe('PATCH /diagnostics/:serviceOrderId', () => {
 
     expect(response.status).toBe(422);
     expect(useCase.execute).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /diagnostics/:serviceOrderId/failure', () => {
+  let failUseCase: { execute: ReturnType<typeof makeFail> };
+  let app: ReturnType<typeof makeDiagnosticRoutes>;
+
+  const post = (body: unknown, id: string = serviceOrderId) =>
+    app.handle(
+      new Request(`http://localhost/diagnostics/${id}/failure`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    );
+
+  beforeEach(() => {
+    failUseCase = { execute: makeFail() };
+    app = makeDiagnosticRoutes({ execute: makeExecute() }, failUseCase);
+  });
+
+  it('fails the diagnostic with the reason the mechanic gave', async () => {
+    const response = await post({
+      reason: 'UNREPAIRABLE',
+      detail: 'Bloco do motor trincado',
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      serviceOrderId,
+      status: 'FAILED',
+      reason: 'UNREPAIRABLE',
+      detail: 'Bloco do motor trincado',
+      failedAt: '2026-09-17T16:30:00.000Z',
+    });
+    expect(failUseCase.execute).toHaveBeenCalledWith({
+      serviceOrderId,
+      reason: 'UNREPAIRABLE',
+      detail: 'Bloco do motor trincado',
+    });
+  });
+
+  it('answers 404 for a service order that is not in the queue', async () => {
+    failUseCase.execute.mockRejectedValueOnce(
+      new ExecutionNotFoundError(serviceOrderId),
+    );
+
+    const response = await post({ reason: 'UNREPAIRABLE' });
+
+    expect(response.status).toBe(404);
+  });
+
+  it('answers 409 for a service order that is no longer in diagnostic', async () => {
+    failUseCase.execute.mockRejectedValueOnce(
+      new InvalidExecutionStatusError(
+        'fail the diagnostic of',
+        ExecutionStatus.DIAGNOSED,
+      ),
+    );
+
+    const response = await post({ reason: 'UNREPAIRABLE' });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      message:
+        'Cannot fail the diagnostic of a service order that is DIAGNOSED',
+    });
+  });
+
+  it('lets an unexpected failure surface as a server error', async () => {
+    failUseCase.execute.mockRejectedValueOnce(new Error('broker down'));
+
+    const response = await post({ reason: 'UNREPAIRABLE' });
+
+    expect(response.status).toBe(500);
+  });
+
+  it('refuses a reason outside the contract', async () => {
+    const response = await post({ reason: 'motor quebrou' });
+
+    expect(response.status).toBe(422);
+    expect(failUseCase.execute).not.toHaveBeenCalled();
   });
 });

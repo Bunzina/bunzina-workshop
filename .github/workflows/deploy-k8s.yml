@@ -40,10 +40,37 @@ jobs:
       - name: Run tests with coverage
         run: bun test --config=./bunfig.ci.toml
 
+  preflight:
+    name: Check deploy secrets
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Fail fast when a secret is missing
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          RABBITMQ_URL: ${{ secrets.RABBITMQ_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          missing=()
+          for name in MONGODB_URI RABBITMQ_URL AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_ACCOUNT_ID; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error title=Secrets ausentes::Configure em Settings → Secrets and variables → Actions: ${missing[*]}"
+            exit 1
+          fi
+
   ensure-indexes:
     name: Ensure Mongo Indexes
     runs-on: ubuntu-latest
-    needs: test
+    needs:
+      - test
+      - preflight
     environment: production
 
     steps:
@@ -69,6 +96,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - test
+      - preflight
       - ensure-indexes
     environment: production
 

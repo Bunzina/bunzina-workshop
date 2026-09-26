@@ -2,15 +2,12 @@ import '@/infrastructure/observability/logger-trace';
 
 import { makeDiagnosticRoutes } from '@/adapters/input/http/diagnostic-routes';
 import { makeExecutionRoutes } from '@/adapters/input/http/execution-routes';
+import { PrometheusExecutionMetrics } from '@/adapters/output/metrics/prometheus-execution-metrics';
 import { RabbitMqEventPublisher } from '@/adapters/output/messaging/rabbitmq-event-publisher';
-import {
-  type CompleteDiagnostic,
-  CompleteDiagnosticUseCase,
-} from '@/application/use-cases/execution/complete-diagnostic';
-import {
-  type CompleteExecutionItems,
-  CompleteExecutionItemsUseCase,
-} from '@/application/use-cases/execution/complete-execution-items';
+import { CompleteDiagnosticUseCase } from '@/application/use-cases/execution/complete-diagnostic';
+import { CompleteExecutionItemsUseCase } from '@/application/use-cases/execution/complete-execution-items';
+import { FailDiagnosticUseCase } from '@/application/use-cases/execution/fail-diagnostic';
+import { FailExecutionUseCase } from '@/application/use-cases/execution/fail-execution';
 import { getDb } from '@/infrastructure/configs/mongo';
 import { ExecutionLogRepository } from '@/infrastructure/repositories/execution/execution-log-repository';
 import { ExecutionQueueRepository } from '@/infrastructure/repositories/execution/execution-queue-repository';
@@ -19,6 +16,7 @@ import {
   createHttpMetrics,
   getMetrics,
   metricsContentType,
+  trackExecutionQueue,
 } from '@/infrastructure/observability/metrics';
 import { tracing } from '@/infrastructure/observability/tracing';
 import openapi from '@elysiajs/openapi';
@@ -112,32 +110,48 @@ async function checkDependencies(): Promise<void> {
   await db.command({ ping: 1 });
 }
 
-const completeDiagnostic: CompleteDiagnostic = {
+type UseCase<TInput, TOutput> = {
+  execute(input: TInput): Promise<TOutput>;
+};
+
+const executionMetrics = new PrometheusExecutionMetrics();
+
+const perRequest = <TInput, TOutput>(
+  build: (
+    queueRepository: ExecutionQueueRepository,
+    logRepository: ExecutionLogRepository,
+    eventPublisher: RabbitMqEventPublisher,
+    metrics: PrometheusExecutionMetrics,
+  ) => UseCase<TInput, TOutput>,
+): UseCase<TInput, TOutput> => ({
   execute: async (input) => {
     const db = await getDb();
 
-    return new CompleteDiagnosticUseCase(
+    return build(
       new ExecutionQueueRepository(db),
       new ExecutionLogRepository(db),
       new RabbitMqEventPublisher(),
+      executionMetrics,
     ).execute(input);
   },
-};
+});
 
-const completeExecutionItems: CompleteExecutionItems = {
-  execute: async (input) => {
-    const db = await getDb();
+trackExecutionQueue(async () =>
+  new ExecutionQueueRepository(await getDb()).countByStatus(),
+);
 
-    return new CompleteExecutionItemsUseCase(
-      new ExecutionQueueRepository(db),
-      new ExecutionLogRepository(db),
-      new RabbitMqEventPublisher(),
-    ).execute(input);
-  },
-};
-
-app.use(makeDiagnosticRoutes(completeDiagnostic));
-app.use(makeExecutionRoutes(completeExecutionItems));
+app.use(
+  makeDiagnosticRoutes(
+    perRequest((...deps) => new CompleteDiagnosticUseCase(...deps)),
+    perRequest((...deps) => new FailDiagnosticUseCase(...deps)),
+  ),
+);
+app.use(
+  makeExecutionRoutes(
+    perRequest((...deps) => new CompleteExecutionItemsUseCase(...deps)),
+    perRequest((...deps) => new FailExecutionUseCase(...deps)),
+  ),
+);
 
 app.get('/', ({ redirect }) => redirect('/swagger'), {
   detail: { hide: true },

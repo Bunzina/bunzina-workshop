@@ -5,6 +5,8 @@ import {
   Histogram,
   Registry,
 } from 'prom-client';
+import logger from '@lucas-pmelo/logger';
+import { ExecutionStatus } from '@/domain/execution/types/execution-status';
 
 const registry = new Registry();
 
@@ -53,6 +55,67 @@ export const messageHandlingDurationSeconds = new Histogram({
   buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
 });
 
+const WORKSHOP_STAGE_BUCKETS = [
+  1, 5, 15, 30, 60, 300, 900, 1800, 3600, 7200, 14400, 28800,
+];
+
+export const diagnosticDurationSeconds = new Histogram({
+  name: 'bunzina_workshop_diagnostic_duration_seconds',
+  help: 'Time from the service order entering the queue to the end of its diagnostic, in seconds.',
+  labelNames: ['outcome'],
+  registers: [registry],
+  buckets: WORKSHOP_STAGE_BUCKETS,
+});
+
+export const executionDurationSeconds = new Histogram({
+  name: 'bunzina_workshop_execution_duration_seconds',
+  help: 'Time from the start of the execution to its end, in seconds.',
+  labelNames: ['outcome'],
+  registers: [registry],
+  buckets: WORKSHOP_STAGE_BUCKETS,
+});
+
+export const executionsAbortedTotal = new Counter({
+  name: 'bunzina_workshop_executions_aborted_total',
+  help: 'Total number of service orders aborted by the orchestrator.',
+  labelNames: ['reason'],
+  registers: [registry],
+});
+
+export type QueueSizeSource = () => Promise<
+  Partial<Record<ExecutionStatus, number>>
+>;
+
+let queueSizeSource: QueueSizeSource | undefined;
+
+export const trackExecutionQueue = (source: QueueSizeSource | undefined) => {
+  queueSizeSource = source;
+};
+
+export const executionQueueItems = new Gauge({
+  name: 'bunzina_workshop_execution_queue_items',
+  help: 'Number of service orders in the workshop queue, by status.',
+  labelNames: ['status'],
+  registers: [registry],
+  async collect() {
+    if (!queueSizeSource) {
+      return;
+    }
+
+    try {
+      const counts = await queueSizeSource();
+
+      for (const status of Object.values(ExecutionStatus)) {
+        this.set({ status }, counts[status] ?? 0);
+      }
+    } catch (cause) {
+      logger.warn({
+        message: `Could not count the execution queue: ${cause instanceof Error ? cause.message : String(cause)}`,
+      });
+    }
+  },
+});
+
 const getStatusCode = (status: number | string | undefined): string => {
   const statusCode = Number(status);
   return Number.isInteger(statusCode) && statusCode > 0
@@ -60,7 +123,12 @@ const getStatusCode = (status: number | string | undefined): string => {
     : '200';
 };
 
-const dynamicRoutePatterns: Array<[RegExp, string]> = [];
+const dynamicRoutePatterns: Array<[RegExp, string]> = [
+  [/^\/diagnostics\/[^/]+$/, '/diagnostics/:id'],
+  [/^\/diagnostics\/[^/]+\/failure$/, '/diagnostics/:id/failure'],
+  [/^\/executions\/[^/]+\/items$/, '/executions/:id/items'],
+  [/^\/executions\/[^/]+\/failure$/, '/executions/:id/failure'],
+];
 
 const UUID_SEGMENT =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;

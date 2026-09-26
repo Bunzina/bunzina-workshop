@@ -7,6 +7,7 @@ import { ExecutionItemKind } from '@/domain/execution/types/execution-item-kind'
 import { ExecutionStatus } from '@/domain/execution/types/execution-status';
 import {
   makeEventPublisher,
+  makeExecutionMetrics,
   makeLogRepository,
   makeQueueRepository,
 } from '@/test/factories/make-execution-doubles';
@@ -46,16 +47,19 @@ describe('CompleteDiagnosticUseCase', () => {
   let queueRepository: ReturnType<typeof makeQueueRepository>;
   let logRepository: ReturnType<typeof makeLogRepository>;
   let eventPublisher: ReturnType<typeof makeEventPublisher>;
+  let metrics: ReturnType<typeof makeExecutionMetrics>;
   let useCase: CompleteDiagnosticUseCase;
 
   beforeEach(() => {
     queueRepository = makeQueueRepository();
     logRepository = makeLogRepository();
     eventPublisher = makeEventPublisher();
+    metrics = makeExecutionMetrics();
     useCase = new CompleteDiagnosticUseCase(
       queueRepository,
       logRepository,
       eventPublisher,
+      metrics,
     );
 
     queueRepository.findByServiceOrderId.mockResolvedValue(
@@ -125,6 +129,12 @@ describe('CompleteDiagnosticUseCase', () => {
         currency: 'BRL',
       },
     });
+  });
+
+  it('measures how long the diagnostic took', async () => {
+    const queueItem = await useCase.execute(anInput());
+
+    expect(metrics.diagnosticFinished).toHaveBeenCalledWith(queueItem);
   });
 
   it('prices the diagnosed items in the currency of the service order', async () => {

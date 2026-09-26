@@ -10,7 +10,15 @@ const findOne = mock(async (): Promise<unknown> => null);
 const toArray = mock(async (): Promise<unknown[]> => []);
 const find = mock(() => ({ toArray }));
 const updateOne = mock(async () => ({}));
-const collection = mock(() => ({ insertOne, findOne, find, updateOne }));
+const aggregateToArray = mock(async (): Promise<unknown[]> => []);
+const aggregate = mock(() => ({ toArray: aggregateToArray }));
+const collection = mock(() => ({
+  insertOne,
+  findOne,
+  find,
+  updateOne,
+  aggregate,
+}));
 
 const db = { collection } as unknown as Db;
 
@@ -108,5 +116,22 @@ describe('ExecutionQueueRepository', () => {
     expect(updated.updatedAt.getTime()).toBeGreaterThan(
       new Date('2026-09-17T16:00:00.000Z').getTime(),
     );
+  });
+
+  it('counts the queue items grouped by status', async () => {
+    aggregateToArray.mockResolvedValueOnce([
+      { _id: ExecutionStatus.IN_DIAGNOSTIC, count: 3 },
+      { _id: ExecutionStatus.COMPLETED, count: 7 },
+    ]);
+
+    const counts = await makeRepository().countByStatus();
+
+    expect(aggregate).toHaveBeenCalledWith([
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]);
+    expect(counts).toEqual({
+      [ExecutionStatus.IN_DIAGNOSTIC]: 3,
+      [ExecutionStatus.COMPLETED]: 7,
+    });
   });
 });

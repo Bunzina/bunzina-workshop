@@ -22,3 +22,12 @@ export class ExecutionItemNotFoundError extends Error {
     this.name = 'ExecutionItemNotFoundError';
   }
 }
+
+export class ExecutionItemAlreadyCompletedError extends Error {
+  constructor(serviceOrderId: string, serviceId: string) {
+    super(
+      `Service ${serviceId} of service order ${serviceOrderId} is already completed`,
+    );
+    this.name = 'ExecutionItemAlreadyCompletedError';
+  }
+}
