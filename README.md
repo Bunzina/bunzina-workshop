@@ -313,3 +313,8 @@ prática é liberar `0.0.0.0/0` com usuário e senha fortes.
 
 Se faltar algum secret, o job `Check deploy secrets` falha logo no começo e lista os
 que estão ausentes.
+
+O `ServiceMonitor` só é criado quando o CRD do Prometheus Operator existe no cluster
+(ele vem com o `kube-prometheus-stack`, no deploy do `bunzina`). Sem o CRD, o deploy
+segue sem ele e deixa um aviso no run. Basta rodar o deploy de novo depois que o
+monitoramento subir.
