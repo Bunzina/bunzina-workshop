@@ -163,10 +163,18 @@ jobs:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           RABBITMQ_URL: ${{ secrets.RABBITMQ_URL }}
         run: |
+          if kubectl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; then
+            SERVICE_MONITOR=true
+          else
+            SERVICE_MONITOR=false
+            echo "::warning title=ServiceMonitor desligado::O CRD servicemonitors.monitoring.coreos.com não existe no cluster. Suba o kube-prometheus-stack (deploy do bunzina) e rode este deploy de novo para o Prometheus coletar /metrics."
+          fi
+
           helm upgrade --install "$HELM_RELEASE" charts/bunzina-workshop-chart \
             --namespace "$K8S_NAMESPACE" --create-namespace \
             --set app-chart.app.image.repository="${ECR_REGISTRY}/${ECR_REPOSITORY}" \
             --set app-chart.app.image.tag="$IMAGE_TAG" \
+            --set app-chart.app.metrics.serviceMonitor.enabled="$SERVICE_MONITOR" \
             --set app-chart.database.enabled=false \
             --set app-chart.app.secret.MONGODB_URI="$MONGODB_URI" \
             --set app-chart.app.secret.RABBITMQ_URL="$RABBITMQ_URL" \
