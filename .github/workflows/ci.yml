@@ -54,6 +54,9 @@ jobs:
       - name: Run tests with coverage
         run: bun test --config=./bunfig.ci.toml
 
+      - name: Run business acceptance scenarios
+        run: bun run bdd
+
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
