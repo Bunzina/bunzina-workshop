@@ -4,15 +4,16 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - '3000:3000'
+      - '3002:3000'
     volumes:
       - ./:/app
       - /app/.bun
+      - /app/node_modules
     environment:
       - APP_ENV=dev
       - MONGODB_URI=mongodb://bun:bun@mongo:27017/bunzina-workshop?authSource=admin
       - MONGODB_DB=bunzina-workshop
-      - RABBITMQ_URL=amqp://bunzina:bunzina@rabbitmq:5672
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://bunzina:bunzina@rabbitmq:5672}
       - RABBITMQ_EXCHANGE=bunzina.events
       - RABBITMQ_QUEUE=bunzina-workshop.inbox
       - OTEL_SERVICE_NAME=bunzina-workshop
@@ -44,8 +45,8 @@ services:
       RABBITMQ_DEFAULT_USER: bunzina
       RABBITMQ_DEFAULT_PASS: bunzina
     ports:
-      - '5672:5672'
-      - '15672:15672'
+      - '5673:5672'
+      - '15673:15672'
     healthcheck:
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
       interval: 10s
