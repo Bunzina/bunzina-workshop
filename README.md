@@ -252,6 +252,7 @@ ao `eventType` (por exemplo, `cmd.workshop.start-diagnostic`) e um envelope do c
 | --- | --- |
 | `bun test` | Testes, sem banco nem broker: repositórios e canal são injetados |
 | `bun run test:ci` | Testes com o gate de cobertura de 80% do CI |
+| `bun run bdd` | Cenários de aceitação Cucumber das regras de negócio da oficina |
 | `bun run lint` · `bun run fmt:check` | oxlint e oxfmt |
 
 ## Cobertura de testes
