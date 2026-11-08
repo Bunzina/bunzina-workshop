@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  "ignorePatterns": ["*.md", "dist/**", "node_modules/**", "charts/**"],
+  "ignorePatterns": ["*.md", "dist/**", "node_modules/**", "charts/**", "cucumber.json"],
   "singleQuote": true,
   "trailingComma": "all",
   "printWidth": 80,
